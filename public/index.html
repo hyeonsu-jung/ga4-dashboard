@@ -212,7 +212,15 @@
     box-shadow: 0 16px 48px rgba(0,0,0,.18);
   }
   .modal h2 { font-size: 1.1rem; margin-bottom: 6px; }
-  .modal .hint { color: var(--muted); font-size: 0.85rem; margin-bottom: 18px; }
+  .modal .hint { color: var(--muted); font-size: 0.85rem; margin-bottom: 14px; }
+  .prop-search-wrap { margin-bottom: 12px; }
+  .prop-search-wrap input {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
+    font-size: 0.9rem; font-family: var(--sans); background: var(--surface); color: var(--ink);
+  }
+  .prop-search-wrap input::placeholder { color: var(--muted); }
+  .prop-search-wrap input:focus { outline: 2px solid var(--primary); outline-offset: 0; border-color: var(--primary); }
+  .prop-list-wrap { max-height: 50vh; overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
   .prop-list { list-style: none; }
   .prop-list li + li { margin-top: 8px; }
   .prop-list button {
@@ -257,7 +265,12 @@
   <div class="modal">
     <h2 id="propertyModalTitle">GA4 속성 선택</h2>
     <p class="hint">Google 계정에 연결된 Analytics 속성 중 하나를 선택하세요.</p>
-    <ul class="prop-list" id="propertyList"></ul>
+    <div class="prop-search-wrap" id="propertySearchWrap" hidden>
+      <input type="search" id="propertySearch" placeholder="속성명, 계정명, ID 검색" autocomplete="off" aria-label="GA4 속성 검색" />
+    </div>
+    <div class="prop-list-wrap">
+      <ul class="prop-list" id="propertyList"></ul>
+    </div>
     <div class="modal-actions">
       <button type="button" id="propertyCancelBtn">취소</button>
     </div>
@@ -332,7 +345,7 @@
 <script>
 const $ = (s) => document.querySelector(s);
 const fmt = new Intl.NumberFormat('ko-KR');
-const state = { data: null, metric: 'activeUsers', chart: null, auth: null, realtimeTimer: null };
+const state = { data: null, metric: 'activeUsers', chart: null, auth: null, realtimeTimer: null, allProperties: [] };
 
 const KPI_DEFS = [
   { key: 'activeUsers', label: '활성 사용자', spark: 'activeUsers' },
@@ -546,7 +559,54 @@ async function fetchAuth() {
   return state.auth;
 }
 
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function bindPropertyButtons() {
+  $('#propertyList').querySelectorAll('button').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      try {
+        await selectProperty(btn.dataset.id, btn.dataset.name);
+      } catch (e) {
+        alert(e.message || '속성 선택에 실패했습니다.');
+      }
+    });
+  });
+}
+
+function renderPropertyList(query = '') {
+  const q = query.trim().toLowerCase();
+  const filtered = !q
+    ? state.allProperties
+    : state.allProperties.filter((p) =>
+        p.propertyName.toLowerCase().includes(q) ||
+        p.accountName.toLowerCase().includes(q) ||
+        p.propertyId.includes(q)
+      );
+
+  if (!filtered.length) {
+    $('#propertyList').innerHTML = `<li><div class="state">${q ? '검색 결과가 없습니다.' : '속성이 없습니다.'}</div></li>`;
+    return;
+  }
+
+  $('#propertyList').innerHTML = filtered.map((p) =>
+    `<li><button type="button" data-id="${escapeHtml(p.propertyId)}" data-name="${escapeHtml(p.propertyName)}">
+      <span class="name">${escapeHtml(p.propertyName)}</span>
+      <span class="sub">${escapeHtml(p.accountName)} · ID ${escapeHtml(p.propertyId)}</span>
+    </button></li>`).join('');
+
+  bindPropertyButtons();
+}
+
 async function openPropertyPicker(required = false) {
+  $('#propertySearchWrap').hidden = true;
+  $('#propertySearch').value = '';
+  state.allProperties = [];
   $('#propertyList').innerHTML = '<li><div class="state">속성 목록을 불러오는 중…</div></li>';
   $('#propertyOverlay').classList.add('show');
   $('#propertyCancelBtn').hidden = required;
@@ -561,23 +621,12 @@ async function openPropertyPicker(required = false) {
       return;
     }
 
-    $('#propertyList').innerHTML = data.properties.map((p) =>
-      `<li><button type="button" data-id="${p.propertyId}" data-name="${p.propertyName.replace(/"/g, '&quot;')}">
-        <span class="name">${p.propertyName}</span>
-        <span class="sub">${p.accountName} · ID ${p.propertyId}</span>
-      </button></li>`).join('');
-
-    $('#propertyList').querySelectorAll('button').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        try {
-          await selectProperty(btn.dataset.id, btn.dataset.name);
-        } catch (e) {
-          alert(e.message || '속성 선택에 실패했습니다.');
-        }
-      });
-    });
+    state.allProperties = data.properties;
+    $('#propertySearchWrap').hidden = false;
+    renderPropertyList('');
+    $('#propertySearch').focus();
   } catch (e) {
-    $('#propertyList').innerHTML = `<li><div class="state error">${e.message}</div></li>`;
+    $('#propertyList').innerHTML = `<li><div class="state error">${escapeHtml(e.message)}</div></li>`;
   }
 }
 
@@ -659,6 +708,7 @@ async function bootstrap() {
 }
 
 $('#changePropertyBtn').addEventListener('click', () => openPropertyPicker(false));
+$('#propertySearch').addEventListener('input', (e) => renderPropertyList(e.target.value));
 $('#propertyCancelBtn').addEventListener('click', closePropertyPicker);
 $('#propertyOverlay').addEventListener('click', (e) => {
   if (e.target === $('#propertyOverlay') && !$('#propertyCancelBtn').hidden) closePropertyPicker();
