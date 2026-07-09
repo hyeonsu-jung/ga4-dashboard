@@ -38,7 +38,10 @@ ga4-dashboard/
    - Google Analytics Data API
    - Google Analytics Admin API
 3. **API 및 서비스 → OAuth 동의 화면** 구성 (외부/내부, 테스트 사용자 등록)
-4. **API 및 서비스 → 사용자 인증 정보** → **OAuth 2.0 클라이언트 ID** 생성
+4. **OAuth 동의 화면 → 데이터 액세스(Scopes)** 에 아래 스코프 추가:
+   - `https://www.googleapis.com/auth/analytics.readonly` (Google Analytics 읽기)
+   - 스코프를 추가·변경한 뒤에는 **반드시 로그아웃 후 재로그인**해야 적용됩니다.
+5. **API 및 서비스 → 사용자 인증 정보** → **OAuth 2.0 클라이언트 ID** 생성
    - 유형: **웹 애플리케이션**
    - 승인된 리디렉션 URI:
      - 로컬: `http://localhost:3000/api/auth/callback`

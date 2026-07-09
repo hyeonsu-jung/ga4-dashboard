@@ -101,7 +101,14 @@ async function listGa4Properties(accessToken) {
     });
     const data = await r.json();
     if (!r.ok) {
-      throw new Error(data.error?.message || 'GA4 속성 목록 조회에 실패했습니다.');
+      const detail = data.error?.message || data.detail || '';
+      if (detail.includes('insufficient authentication scopes')) {
+        throw Object.assign(
+          new Error('Google Analytics 접근 권한(스코프)이 부족합니다.'),
+          { code: 'INSUFFICIENT_SCOPES', detail }
+        );
+      }
+      throw new Error(detail || data.error || data.message || '목록 조회 실패');
     }
 
     for (const account of data.accountSummaries || []) {

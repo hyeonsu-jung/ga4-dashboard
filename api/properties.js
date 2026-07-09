@@ -17,6 +17,14 @@ module.exports = async (req, res) => {
     res.status(200).json({ properties });
   } catch (err) {
     console.error('[api/properties]', err);
-    res.status(500).json({ error: 'GA4 속성 목록 조회에 실패했습니다.', detail: String(err.message || err) });
+    const detail = String(err.message || err);
+    if (detail.includes('insufficient authentication scopes')) {
+      return res.status(403).json({
+        error: 'INSUFFICIENT_SCOPES',
+        message: 'Google Analytics 접근 권한(스코프)이 부족합니다. 로그아웃 후 다시 로그인해 주세요.',
+        detail,
+      });
+    }
+    res.status(500).json({ error: 'GA4 속성 목록 조회에 실패했습니다.', detail });
   }
 };
