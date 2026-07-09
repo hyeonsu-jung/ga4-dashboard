@@ -2,7 +2,16 @@
 // GET /api/dashboard?startDate=2026-06-01&endDate=2026-06-30
 // 이전 동기간(같은 일수) 비교 데이터를 함께 반환합니다.
 
-const { getClient, getProperty, isConfigured, demoDashboard } = require('./_ga4');
+const {
+  getClient,
+  getProperty,
+  getPropertyMeta,
+  isConfigured,
+  isOAuthConfigured,
+  demoDashboard,
+  authErrorResponse,
+} = require('./_ga4');
+const { getSession } = require('./_session');
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -44,12 +53,21 @@ module.exports = async (req, res) => {
     const prevEnd = shiftDate(startDate, -1);
     const prevStart = shiftDate(prevEnd, -(spanDays - 1));
 
-    if (!isConfigured()) {
+    if (!isOAuthConfigured()) {
       return res.status(200).json(demoDashboard(startDate, endDate, prevStart, prevEnd));
     }
 
-    const client = getClient();
-    const property = getProperty();
+    const session = getSession(req);
+    if (!session?.accessToken) {
+      return authErrorResponse(res, 'LOGIN_REQUIRED');
+    }
+    if (!session.propertyId) {
+      return authErrorResponse(res, 'PROPERTY_REQUIRED');
+    }
+
+    const client = await getClient(req, res);
+    const property = getProperty(req);
+    const meta = getPropertyMeta(req);
 
     const KPI_METRICS = [
       'activeUsers',
@@ -133,7 +151,8 @@ module.exports = async (req, res) => {
 
     res.status(200).json({
       demo: false,
-      propertyId: process.env.GA4_PROPERTY_ID,
+      propertyId: meta.propertyId,
+      propertyName: meta.propertyName,
       range: { startDate, endDate },
       compareRange: { startDate: prevStart, endDate: prevEnd },
       kpis: toKpi(kpiNow),

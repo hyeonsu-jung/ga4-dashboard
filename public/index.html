@@ -56,7 +56,7 @@
   }
   .report-strip .meta b { color: #eef4f1; font-weight: 500; }
   .live {
-    margin-left: auto; display: inline-flex; align-items: center; gap: 8px;
+    display: inline-flex; align-items: center; gap: 8px;
     font-family: var(--mono); font-size: 0.75rem;
   }
   .live .dot {
@@ -170,6 +170,62 @@
 
   .state { text-align: center; color: var(--muted); padding: 48px 0; font-size: 0.9rem; }
   .state.error { color: var(--down); }
+
+  /* ---- 인증 / 속성 선택 ---- */
+  .header-actions {
+    margin-left: auto; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .auth-bar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    font-size: 0.78rem;
+  }
+  .auth-bar .user { font-family: var(--mono); color: #9db3ab; }
+  .auth-btn, .property-btn {
+    border: 1px solid #3d524c; background: transparent; color: #eef4f1;
+    padding: 6px 12px; border-radius: 8px; font-size: 0.78rem;
+  }
+  .auth-btn:hover, .property-btn:hover { background: #243530; }
+  .google-btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: #fff; color: #1f1f1f; border: none; border-radius: 10px;
+    padding: 12px 20px; font-size: 0.95rem; font-weight: 600; text-decoration: none;
+    box-shadow: 0 1px 3px rgba(0,0,0,.12);
+  }
+  .google-btn:hover { background: #f5f5f5; }
+  .google-btn svg { width: 18px; height: 18px; }
+
+  .gate {
+    max-width: 480px; margin: 80px auto; text-align: center;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 40px 32px;
+  }
+  .gate h1 { font-size: 1.35rem; margin-bottom: 10px; letter-spacing: -0.02em; }
+  .gate p { color: var(--muted); font-size: 0.92rem; margin-bottom: 24px; }
+
+  .overlay {
+    display: none; position: fixed; inset: 0; background: rgba(20,32,28,.45);
+    align-items: center; justify-content: center; z-index: 100; padding: 24px;
+  }
+  .overlay.show { display: flex; }
+  .modal {
+    width: min(520px, 100%); max-height: 80vh; overflow: auto;
+    background: var(--surface); border-radius: 14px; padding: 24px;
+    box-shadow: 0 16px 48px rgba(0,0,0,.18);
+  }
+  .modal h2 { font-size: 1.1rem; margin-bottom: 6px; }
+  .modal .hint { color: var(--muted); font-size: 0.85rem; margin-bottom: 18px; }
+  .prop-list { list-style: none; }
+  .prop-list li + li { margin-top: 8px; }
+  .prop-list button {
+    width: 100%; text-align: left; border: 1px solid var(--line); background: var(--surface);
+    border-radius: 10px; padding: 12px 14px;
+  }
+  .prop-list button:hover { border-color: var(--primary); background: var(--primary-soft); }
+  .prop-list .name { font-weight: 600; display: block; }
+  .prop-list .sub { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+  .modal-actions { margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px; }
+  .modal-actions button {
+    border: 1px solid var(--line); background: none; border-radius: 8px; padding: 8px 14px; font-size: 0.85rem;
+  }
 </style>
 </head>
 <body>
@@ -183,16 +239,44 @@
       <span>비교 <b id="metaCompare">–</b></span>
       <span>갱신 <b id="metaUpdated">–</b></span>
     </span>
+    <div class="header-actions">
     <span class="live" title="최근 30분 활성 사용자">
       <span class="dot" aria-hidden="true"></span>
       실시간 <b id="liveUsers">–</b>명
     </span>
+    <div class="auth-bar" id="authBar" hidden>
+      <span class="user" id="authUser"></span>
+      <button class="property-btn" id="changePropertyBtn" type="button" hidden>속성 변경</button>
+      <a class="auth-btn" id="logoutBtn" href="/api/auth/logout" hidden>로그아웃</a>
+    </div>
+    </div>
   </div>
 </header>
 
-<main class="wrap">
+<div class="overlay" id="propertyOverlay" role="dialog" aria-modal="true" aria-labelledby="propertyModalTitle">
+  <div class="modal">
+    <h2 id="propertyModalTitle">GA4 속성 선택</h2>
+    <p class="hint">Google 계정에 연결된 Analytics 속성 중 하나를 선택하세요.</p>
+    <ul class="prop-list" id="propertyList"></ul>
+    <div class="modal-actions">
+      <button type="button" id="propertyCancelBtn">취소</button>
+    </div>
+  </div>
+</div>
+
+<main class="wrap" id="mainWrap">
+  <div class="gate" id="loginGate" hidden>
+    <h1>GA4 대시보드 연결</h1>
+    <p>Google 계정으로 로그인한 뒤, 접근 가능한 GA4 속성을 직접 선택할 수 있습니다.</p>
+    <a class="google-btn" id="googleLoginBtn" href="/api/auth/login">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+      Google로 로그인
+    </a>
+  </div>
+
+  <div id="dashboardContent">
   <div class="demo-banner" id="demoBanner">
-    데모 데이터로 표시 중입니다. Vercel 환경변수에 <code>GA4_PROPERTY_ID</code>와 <code>GOOGLE_SERVICE_ACCOUNT_KEY</code>를 설정하면 실제 GA4 데이터가 표시됩니다.
+    데모 데이터로 표시 중입니다. Google OAuth 환경변수를 설정하면 로그인 후 실제 GA4 속성을 선택할 수 있습니다.
   </div>
 
   <div class="controls" role="group" aria-label="조회 기간 선택">
@@ -242,12 +326,13 @@
       <div id="pageTable"></div>
     </section>
   </div>
+  </div>
 </main>
 
 <script>
 const $ = (s) => document.querySelector(s);
 const fmt = new Intl.NumberFormat('ko-KR');
-const state = { data: null, metric: 'activeUsers', chart: null };
+const state = { data: null, metric: 'activeUsers', chart: null, auth: null, realtimeTimer: null };
 
 const KPI_DEFS = [
   { key: 'activeUsers', label: '활성 사용자', spark: 'activeUsers' },
@@ -290,7 +375,15 @@ async function load(startDate, endDate) {
   try {
     const r = await fetch(`/api/dashboard?startDate=${startDate}&endDate=${endDate}`);
     const data = await r.json();
-    if (!r.ok) throw new Error(data.error || '조회 실패');
+    if (r.status === 401) {
+      if (data.error === 'PROPERTY_REQUIRED') {
+        await openPropertyPicker(true);
+        return;
+      }
+      showLoginGate();
+      return;
+    }
+    if (!r.ok) throw new Error(data.error || data.message || '조회 실패');
     state.data = data;
     render();
   } catch (e) {
@@ -320,7 +413,7 @@ function sparkline(values) {
 function render() {
   const d = state.data;
   $('#demoBanner').classList.toggle('show', !!d.demo);
-  $('#metaProperty').textContent = d.propertyId;
+  $('#metaProperty').textContent = d.propertyName ? `${d.propertyName} (${d.propertyId})` : d.propertyId;
   $('#metaRange').textContent = `${d.range.startDate} ~ ${d.range.endDate}`;
   $('#metaCompare').textContent = `${d.compareRange.startDate} ~ ${d.compareRange.endDate}`;
   $('#metaUpdated').textContent = new Date().toLocaleString('ko-KR', { hour12: false });
@@ -406,6 +499,162 @@ function renderTables() {
     </tr>`).join('')}</tbody></table>`;
 }
 
+// ---- 인증 / 속성 선택 ----
+function showLoginGate() {
+  $('#loginGate').hidden = false;
+  $('#dashboardContent').hidden = true;
+  $('#authBar').hidden = true;
+  stopRealtime();
+}
+
+function showDashboard() {
+  $('#loginGate').hidden = true;
+  $('#dashboardContent').hidden = false;
+}
+
+function updateAuthBar(auth) {
+  const bar = $('#authBar');
+  if (!auth?.oauthConfigured) {
+    bar.hidden = true;
+    return;
+  }
+  bar.hidden = false;
+  if (auth.loggedIn) {
+    $('#authUser').textContent = auth.email || auth.name || '';
+    $('#logoutBtn').hidden = false;
+    $('#changePropertyBtn').hidden = false;
+  } else {
+    $('#authUser').textContent = '';
+    $('#logoutBtn').hidden = true;
+    $('#changePropertyBtn').hidden = true;
+  }
+}
+
+async function fetchAuth() {
+  const r = await fetch('/api/auth/me');
+  state.auth = await r.json();
+  updateAuthBar(state.auth);
+  return state.auth;
+}
+
+async function openPropertyPicker(required = false) {
+  $('#propertyList').innerHTML = '<li><div class="state">속성 목록을 불러오는 중…</div></li>';
+  $('#propertyOverlay').classList.add('show');
+  $('#propertyCancelBtn').hidden = required;
+
+  try {
+    const r = await fetch('/api/properties');
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || data.message || '목록 조회 실패');
+
+    if (!data.properties?.length) {
+      $('#propertyList').innerHTML = '<li><div class="state error">접근 가능한 GA4 속성이 없습니다.<br/>Google Analytics에서 해당 계정에 권한이 있는지 확인해 주세요.</div></li>';
+      return;
+    }
+
+    $('#propertyList').innerHTML = data.properties.map((p) =>
+      `<li><button type="button" data-id="${p.propertyId}" data-name="${p.propertyName.replace(/"/g, '&quot;')}">
+        <span class="name">${p.propertyName}</span>
+        <span class="sub">${p.accountName} · ID ${p.propertyId}</span>
+      </button></li>`).join('');
+
+    $('#propertyList').querySelectorAll('button').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        try {
+          await selectProperty(btn.dataset.id, btn.dataset.name);
+        } catch (e) {
+          alert(e.message || '속성 선택에 실패했습니다.');
+        }
+      });
+    });
+  } catch (e) {
+    $('#propertyList').innerHTML = `<li><div class="state error">${e.message}</div></li>`;
+  }
+}
+
+function closePropertyPicker() {
+  $('#propertyOverlay').classList.remove('show');
+}
+
+async function selectProperty(propertyId, propertyName) {
+  const r = await fetch('/api/select-property', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ propertyId, propertyName }),
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || '속성 선택 실패');
+
+  await fetchAuth();
+  closePropertyPicker();
+  showDashboard();
+  const init = rangeFromPreset('7');
+  $('#customStart').value = init.startDate;
+  $('#customEnd').value = init.endDate;
+  load(init.startDate, init.endDate);
+  startRealtime();
+}
+
+function stopRealtime() {
+  if (state.realtimeTimer) {
+    clearInterval(state.realtimeTimer);
+    state.realtimeTimer = null;
+  }
+}
+
+function startRealtime() {
+  stopRealtime();
+  pollRealtime();
+  state.realtimeTimer = setInterval(pollRealtime, 60000);
+}
+
+async function bootstrap() {
+  const params = new URLSearchParams(location.search);
+  if (params.get('auth_error')) {
+    alert('로그인에 실패했습니다: ' + params.get('auth_error'));
+    history.replaceState({}, '', location.pathname);
+  } else if (params.get('auth') === 'success') {
+    history.replaceState({}, '', location.pathname);
+  }
+
+  const auth = await fetchAuth();
+
+  if (!auth.oauthConfigured) {
+    showDashboard();
+    const init = rangeFromPreset('7');
+    $('#customStart').value = init.startDate;
+    $('#customEnd').value = init.endDate;
+    load(init.startDate, init.endDate);
+    startRealtime();
+    return;
+  }
+
+  if (!auth.loggedIn) {
+    showLoginGate();
+    return;
+  }
+
+  if (!auth.propertyId) {
+    showDashboard();
+    $('#dashboardContent').hidden = true;
+    await openPropertyPicker(true);
+    return;
+  }
+
+  showDashboard();
+  const init = rangeFromPreset('7');
+  $('#customStart').value = init.startDate;
+  $('#customEnd').value = init.endDate;
+  load(init.startDate, init.endDate);
+  startRealtime();
+}
+
+$('#changePropertyBtn').addEventListener('click', () => openPropertyPicker(false));
+$('#propertyCancelBtn').addEventListener('click', closePropertyPicker);
+$('#propertyOverlay').addEventListener('click', (e) => {
+  if (e.target === $('#propertyOverlay') && !$('#propertyCancelBtn').hidden) closePropertyPicker();
+});
+
 // ---- 실시간 ----
 async function pollRealtime() {
   try {
@@ -449,13 +698,8 @@ $('#applyCustom').addEventListener('click', () => {
   load(s, e);
 });
 
-// 초기 로드: 최근 7일
-const init = rangeFromPreset('7');
-$('#customStart').value = init.startDate;
-$('#customEnd').value = init.endDate;
-load(init.startDate, init.endDate);
-pollRealtime();
-setInterval(pollRealtime, 60000);
+// 초기 로드
+bootstrap();
 </script>
 </body>
 </html>

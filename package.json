@@ -4,13 +4,14 @@
   "description": "GA4 Data API 연동 웹 분석 대시보드",
   "main": "server.js",
   "scripts": {
-    "dev": "node server.js"
+    "dev": "node --env-file=.env server.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@google-analytics/data": "^6.1.0",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "google-auth-library": "^10.5.0"
   }
 }

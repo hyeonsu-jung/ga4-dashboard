@@ -1,18 +1,32 @@
 // api/realtime.js — 실시간 활성 사용자 (최근 30분)
 // GET /api/realtime
 
-const { getClient, getProperty, isConfigured } = require('./_ga4');
+const {
+  getClient,
+  getProperty,
+  isOAuthConfigured,
+  authErrorResponse,
+} = require('./_ga4');
+const { getSession } = require('./_session');
 
 module.exports = async (req, res) => {
   try {
-    if (!isConfigured()) {
-      // 데모 모드: 시각 기반 유사값
+    if (!isOAuthConfigured()) {
       const n = 40 + (new Date().getMinutes() % 17) * 3;
       return res.status(200).json({ demo: true, activeUsers: n });
     }
-    const client = getClient();
+
+    const session = getSession(req);
+    if (!session?.accessToken) {
+      return authErrorResponse(res, 'LOGIN_REQUIRED');
+    }
+    if (!session.propertyId) {
+      return authErrorResponse(res, 'PROPERTY_REQUIRED');
+    }
+
+    const client = await getClient(req, res);
     const [report] = await client.runRealtimeReport({
-      property: getProperty(),
+      property: getProperty(req),
       metrics: [{ name: 'activeUsers' }],
     });
     const activeUsers = Number(report.rows?.[0]?.metricValues?.[0]?.value || 0);

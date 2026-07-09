@@ -1,52 +1,42 @@
 // api/_ga4.js — GA4 Data API 공용 모듈
-// 인증: GOOGLE_SERVICE_ACCOUNT_KEY 환경변수 (서비스 계정 JSON 원문 또는 base64)
-// 속성: GA4_PROPERTY_ID 환경변수 (예: 503025816)
-// 환경변수가 없으면 데모 데이터 모드로 동작합니다.
+// 인증: Google OAuth (세션 쿠키) — 사용자가 직접 GA4 속성 선택
+// OAuth 미설정 시 데모 데이터 모드로 동작합니다.
 
 const { BetaAnalyticsDataClient } = require('@google-analytics/data');
+const { isOAuthConfigured, getSession } = require('./_session');
+const { getAuthenticatedClient } = require('./_oauth');
 
-let _client = null;
-
-function getCredentials() {
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
-  if (!raw) return null;
-  try {
-    // JSON 원문 시도
-    return JSON.parse(raw);
-  } catch (e) {
-    // base64 시도
-    try {
-      return JSON.parse(Buffer.from(raw, 'base64').toString('utf8'));
-    } catch (e2) {
-      throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY 파싱 실패: JSON 원문 또는 base64 인코딩 JSON이어야 합니다.');
-    }
-  }
+function hasSelectedProperty(req) {
+  const session = getSession(req);
+  return Boolean(session?.accessToken && session?.propertyId);
 }
 
-function isConfigured() {
-  return Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_KEY && process.env.GA4_PROPERTY_ID);
+function isConfigured(req) {
+  return isOAuthConfigured() && hasSelectedProperty(req);
 }
 
-function getClient() {
-  if (_client) return _client;
-  const credentials = getCredentials();
-  _client = new BetaAnalyticsDataClient({
-    credentials: {
-      client_email: credentials.client_email,
-      private_key: credentials.private_key,
-    },
-    projectId: credentials.project_id,
-  });
-  return _client;
+async function getClient(req, res) {
+  const auth = await getAuthenticatedClient(req, res);
+  if (!auth) throw new Error('LOGIN_REQUIRED');
+  return new BetaAnalyticsDataClient({ authClient: auth.client });
 }
 
-function getProperty() {
-  return `properties/${process.env.GA4_PROPERTY_ID}`;
+function getProperty(req) {
+  const session = getSession(req);
+  if (!session?.propertyId) throw new Error('PROPERTY_REQUIRED');
+  return `properties/${session.propertyId}`;
 }
 
-// ---------- 데모 데이터 (환경변수 미설정 시) ----------
+function getPropertyMeta(req) {
+  const session = getSession(req);
+  return {
+    propertyId: session?.propertyId || 'DEMO',
+    propertyName: session?.propertyName || null,
+  };
+}
 
-// 날짜 문자열 기반 결정적 의사난수 → 새로고침해도 같은 값
+// ---------- 데모 데이터 (OAuth 미설정 또는 미로그인 시) ----------
+
 function seededRandom(seed) {
   let h = 2166136261;
   for (let i = 0; i < seed.length; i++) {
@@ -125,6 +115,7 @@ function demoDashboard(startDate, endDate, prevStart, prevEnd) {
   return {
     demo: true,
     propertyId: 'DEMO',
+    propertyName: '데모 데이터',
     range: { startDate, endDate },
     compareRange: { startDate: prevStart, endDate: prevEnd },
     kpis: kpiFrom(daily),
@@ -135,4 +126,22 @@ function demoDashboard(startDate, endDate, prevStart, prevEnd) {
   };
 }
 
-module.exports = { getClient, getProperty, isConfigured, demoDashboard, eachDate };
+function authErrorResponse(res, code) {
+  const messages = {
+    LOGIN_REQUIRED: 'Google 계정으로 로그인해 주세요.',
+    PROPERTY_REQUIRED: 'GA4 속성을 선택해 주세요.',
+  };
+  return res.status(401).json({ error: code, message: messages[code] || code });
+}
+
+module.exports = {
+  isOAuthConfigured,
+  hasSelectedProperty,
+  isConfigured,
+  getClient,
+  getProperty,
+  getPropertyMeta,
+  demoDashboard,
+  eachDate,
+  authErrorResponse,
+};
