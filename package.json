@@ -1,0 +1,16 @@
+{
+  "name": "ga4-web-dashboard",
+  "version": "1.0.0",
+  "description": "GA4 Data API 연동 웹 분석 대시보드",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google-analytics/data": "^6.1.0",
+    "express": "^5.2.1"
+  }
+}

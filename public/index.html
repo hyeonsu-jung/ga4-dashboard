@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>웹 분석 대시보드 · GA4</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/ibm-plex/6.4.0/css/ibm-plex-mono.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root {
+    --paper: #f3f6f4;
+    --surface: #ffffff;
+    --ink: #14201c;
+    --muted: #5e6b66;
+    --line: #e0e7e3;
+    --primary: #0c5c4c;
+    --primary-soft: #e2f0ea;
+    --amber: #d98e24;
+    --up: #0c7a4b;
+    --down: #c24537;
+    --mono: 'IBM Plex Mono', ui-monospace, monospace;
+    --sans: 'Pretendard Variable', Pretendard, -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html { font-size: 15px; }
+  body {
+    font-family: var(--sans);
+    background: var(--paper);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+  }
+  a { color: var(--primary); }
+  button { font-family: var(--sans); cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 24px 72px; }
+
+  /* ---- 리포트 스트립 (문서 표제부) ---- */
+  .report-strip {
+    background: var(--ink);
+    color: #eef4f1;
+    margin: 0 0 28px;
+  }
+  .report-strip .inner {
+    max-width: 1160px; margin: 0 auto; padding: 18px 24px;
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 28px;
+  }
+  .report-strip .doc-title {
+    font-size: 1.05rem; font-weight: 700; letter-spacing: -0.01em;
+  }
+  .report-strip .meta {
+    font-family: var(--mono); font-size: 0.72rem; color: #9db3ab;
+    display: flex; flex-wrap: wrap; gap: 4px 24px;
+  }
+  .report-strip .meta b { color: #eef4f1; font-weight: 500; }
+  .live {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 0.75rem;
+  }
+  .live .dot {
+    width: 8px; height: 8px; border-radius: 50%; background: #35c98e;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+  @media (prefers-reduced-motion: reduce) { .live .dot { animation: none; } }
+  .live b { font-size: 1rem; font-weight: 600; }
+
+  .demo-banner {
+    display: none;
+    background: #fdf3e2; border: 1px solid #eed7ac; color: #7a5410;
+    padding: 10px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 0.85rem;
+  }
+  .demo-banner.show { display: block; }
+
+  /* ---- 컨트롤 ---- */
+  .controls {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 24px;
+  }
+  .preset {
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+    padding: 7px 14px; border-radius: 999px; font-size: 0.85rem;
+  }
+  .preset[aria-pressed="true"] {
+    background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600;
+  }
+  .custom-range { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--muted); }
+  .custom-range input {
+    font-family: var(--mono); font-size: 0.8rem; padding: 6px 8px;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink);
+  }
+  .apply-btn {
+    background: var(--primary); color: #fff; border: none; border-radius: 8px;
+    padding: 7px 16px; font-size: 0.85rem; font-weight: 600;
+  }
+  .csv-btn {
+    margin-left: auto; background: none; border: 1px solid var(--line); border-radius: 8px;
+    padding: 7px 14px; font-size: 0.82rem; color: var(--muted);
+  }
+  .csv-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+  /* ---- KPI 카드 ---- */
+  .kpi-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 14px; margin-bottom: 28px;
+  }
+  .kpi {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px 18px 12px; position: relative; overflow: hidden;
+  }
+  .kpi .label {
+    font-size: 0.78rem; color: var(--muted); letter-spacing: 0.02em; margin-bottom: 6px;
+  }
+  .kpi .value {
+    font-family: var(--mono); font-size: 1.9rem; font-weight: 600;
+    font-variant-numeric: tabular-nums; letter-spacing: -0.03em; line-height: 1.15;
+  }
+  .kpi .value .unit { font-size: 0.9rem; color: var(--muted); font-weight: 400; margin-left: 2px; }
+  .kpi .delta {
+    font-family: var(--mono); font-size: 0.75rem; margin-top: 4px; display: inline-block;
+  }
+  .kpi .delta.up { color: var(--up); }
+  .kpi .delta.down { color: var(--down); }
+  .kpi .delta.flat { color: var(--muted); }
+  .kpi .spark { display: block; margin-top: 8px; width: 100%; height: 30px; }
+
+  /* ---- 섹션 카드 ---- */
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 20px 22px; margin-bottom: 22px;
+  }
+  .card-head {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px;
+  }
+  .card-head h2 { font-size: 1rem; font-weight: 700; letter-spacing: -0.01em; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 0.68rem; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .metric-toggle { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+  .metric-toggle button {
+    border: 1px solid var(--line); background: none; color: var(--muted);
+    padding: 4px 10px; border-radius: 6px; font-size: 0.75rem;
+  }
+  .metric-toggle button[aria-pressed="true"] {
+    background: var(--primary-soft); border-color: var(--primary); color: var(--primary); font-weight: 600;
+  }
+  .chart-box { position: relative; height: 320px; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  @media (max-width: 860px) { .two-col { grid-template-columns: 1fr; } }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th {
+    text-align: left; font-family: var(--mono); font-size: 0.68rem; font-weight: 500;
+    color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 6px 8px; border-bottom: 1px solid var(--line);
+  }
+  th.num, td.num {
+    text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums;
+  }
+  td { padding: 8px; border-bottom: 1px solid var(--line); }
+  tr:last-child td { border-bottom: none; }
+  td .path { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; }
+  .share-bar {
+    height: 4px; border-radius: 2px; background: var(--primary-soft); margin-top: 4px; overflow: hidden;
+  }
+  .share-bar i { display: block; height: 100%; background: var(--primary); }
+
+  .state { text-align: center; color: var(--muted); padding: 48px 0; font-size: 0.9rem; }
+  .state.error { color: var(--down); }
+</style>
+</head>
+<body>
+
+<header class="report-strip">
+  <div class="inner">
+    <span class="doc-title">웹 분석 대시보드</span>
+    <span class="meta">
+      <span>PROPERTY <b id="metaProperty">–</b></span>
+      <span>기간 <b id="metaRange">–</b></span>
+      <span>비교 <b id="metaCompare">–</b></span>
+      <span>갱신 <b id="metaUpdated">–</b></span>
+    </span>
+    <span class="live" title="최근 30분 활성 사용자">
+      <span class="dot" aria-hidden="true"></span>
+      실시간 <b id="liveUsers">–</b>명
+    </span>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="demo-banner" id="demoBanner">
+    데모 데이터로 표시 중입니다. Vercel 환경변수에 <code>GA4_PROPERTY_ID</code>와 <code>GOOGLE_SERVICE_ACCOUNT_KEY</code>를 설정하면 실제 GA4 데이터가 표시됩니다.
+  </div>
+
+  <div class="controls" role="group" aria-label="조회 기간 선택">
+    <button class="preset" data-days="1">오늘</button>
+    <button class="preset" data-days="7" aria-pressed="true">최근 7일</button>
+    <button class="preset" data-days="30">최근 30일</button>
+    <button class="preset" data-days="month">이번 달</button>
+    <span class="custom-range">
+      <input type="date" id="customStart" aria-label="시작일" />
+      ~
+      <input type="date" id="customEnd" aria-label="종료일" />
+      <button class="apply-btn" id="applyCustom">적용</button>
+    </span>
+    <button class="csv-btn" id="csvBtn">일별 데이터 CSV 내려받기</button>
+  </div>
+
+  <section class="kpi-grid" id="kpiGrid" aria-label="핵심 지표"></section>
+
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <div class="eyebrow">Daily Trend</div>
+        <h2>일별 추이</h2>
+      </div>
+      <div class="metric-toggle" id="metricToggle" role="group" aria-label="추이 지표 선택"></div>
+    </div>
+    <div class="chart-box"><canvas id="trendChart"></canvas></div>
+  </section>
+
+  <div class="two-col">
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <div class="eyebrow">Acquisition</div>
+          <h2>채널별 유입</h2>
+        </div>
+      </div>
+      <div id="channelTable"></div>
+    </section>
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <div class="eyebrow">Engagement</div>
+          <h2>인기 페이지</h2>
+        </div>
+      </div>
+      <div id="pageTable"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const fmt = new Intl.NumberFormat('ko-KR');
+const state = { data: null, metric: 'activeUsers', chart: null };
+
+const KPI_DEFS = [
+  { key: 'activeUsers', label: '활성 사용자', spark: 'activeUsers' },
+  { key: 'newUsers', label: '신규 사용자' },
+  { key: 'sessions', label: '세션', spark: 'sessions' },
+  { key: 'eventCount', label: '이벤트 수', spark: 'eventCount' },
+  { key: 'keyEvents', label: '주요 이벤트 (전환)', spark: 'keyEvents' },
+  { key: 'avgEngagementSeconds', label: '평균 참여 시간', format: (v) => {
+      const m = Math.floor(v / 60), s = Math.round(v % 60);
+      return `${m}<span class="unit">분</span> ${s}<span class="unit">초</span>`;
+    } },
+];
+
+const TREND_METRICS = [
+  { key: 'activeUsers', label: '활성 사용자' },
+  { key: 'sessions', label: '세션' },
+  { key: 'eventCount', label: '이벤트' },
+  { key: 'keyEvents', label: '주요 이벤트' },
+];
+
+function ymd(d) { return d.toISOString().slice(0, 10); }
+function todayKST() {
+  // KST 기준 오늘
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+function rangeFromPreset(preset) {
+  const end = todayKST();
+  if (preset === 'month') {
+    return { startDate: end.slice(0, 8) + '01', endDate: end };
+  }
+  const days = Number(preset);
+  const s = new Date(end + 'T00:00:00Z');
+  s.setUTCDate(s.getUTCDate() - (days - 1));
+  return { startDate: ymd(s), endDate: end };
+}
+
+async function load(startDate, endDate) {
+  $('#kpiGrid').innerHTML = '<div class="state">데이터를 불러오는 중…</div>';
+  try {
+    const r = await fetch(`/api/dashboard?startDate=${startDate}&endDate=${endDate}`);
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || '조회 실패');
+    state.data = data;
+    render();
+  } catch (e) {
+    $('#kpiGrid').innerHTML = `<div class="state error">데이터를 불러오지 못했습니다. ${e.message}<br/>기간을 다시 선택해 조회할 수 있습니다.</div>`;
+  }
+}
+
+function deltaHtml(now, prev) {
+  if (!prev) return '<span class="delta flat">이전 기간 데이터 없음</span>';
+  const pct = ((now - prev) / prev) * 100;
+  const cls = pct > 0.05 ? 'up' : pct < -0.05 ? 'down' : 'flat';
+  const arrow = cls === 'up' ? '▲' : cls === 'down' ? '▼' : '–';
+  return `<span class="delta ${cls}">${arrow} ${Math.abs(pct).toFixed(1)}% <span style="color:var(--muted)">vs 이전 기간</span></span>`;
+}
+
+function sparkline(values) {
+  if (!values || values.length < 2) return '';
+  const w = 200, h = 30, max = Math.max(...values), min = Math.min(...values);
+  const span = max - min || 1;
+  const pts = values.map((v, i) =>
+    `${(i / (values.length - 1)) * w},${h - 3 - ((v - min) / span) * (h - 6)}`).join(' ');
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+    <polyline points="${pts}" fill="none" stroke="var(--primary)" stroke-width="1.5" />
+  </svg>`;
+}
+
+function render() {
+  const d = state.data;
+  $('#demoBanner').classList.toggle('show', !!d.demo);
+  $('#metaProperty').textContent = d.propertyId;
+  $('#metaRange').textContent = `${d.range.startDate} ~ ${d.range.endDate}`;
+  $('#metaCompare').textContent = `${d.compareRange.startDate} ~ ${d.compareRange.endDate}`;
+  $('#metaUpdated').textContent = new Date().toLocaleString('ko-KR', { hour12: false });
+
+  // KPI 카드
+  $('#kpiGrid').innerHTML = KPI_DEFS.map((def) => {
+    const now = d.kpis[def.key], prev = d.prevKpis[def.key];
+    const valueHtml = def.format ? def.format(now) : fmt.format(Math.round(now));
+    const spark = def.spark ? sparkline(d.daily.map((r) => r[def.spark])) : '';
+    return `<article class="kpi">
+      <div class="label">${def.label}</div>
+      <div class="value">${valueHtml}</div>
+      ${deltaHtml(now, prev)}
+      ${spark}
+    </article>`;
+  }).join('');
+
+  renderToggle();
+  renderChart();
+  renderTables();
+}
+
+function renderToggle() {
+  $('#metricToggle').innerHTML = TREND_METRICS.map((m) =>
+    `<button aria-pressed="${state.metric === m.key}" data-metric="${m.key}">${m.label}</button>`).join('');
+  $('#metricToggle').querySelectorAll('button').forEach((b) =>
+    b.addEventListener('click', () => { state.metric = b.dataset.metric; renderToggle(); renderChart(); }));
+}
+
+function renderChart() {
+  const d = state.data;
+  const label = TREND_METRICS.find((m) => m.key === state.metric).label;
+  const ctx = $('#trendChart');
+  if (state.chart) state.chart.destroy();
+  state.chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: d.daily.map((r) => r.date.slice(5)),
+      datasets: [{
+        label,
+        data: d.daily.map((r) => r[state.metric]),
+        borderColor: '#0c5c4c',
+        backgroundColor: 'rgba(12,92,76,0.08)',
+        fill: true,
+        tension: 0.25,
+        pointRadius: d.daily.length > 45 ? 0 : 2.5,
+        borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (c) => `${label}: ${fmt.format(c.parsed.y)}` } },
+      },
+      scales: {
+        y: { beginAtZero: true, ticks: { callback: (v) => fmt.format(v), font: { family: 'IBM Plex Mono', size: 10 } }, grid: { color: '#eef2f0' } },
+        x: { ticks: { maxTicksLimit: 12, font: { family: 'IBM Plex Mono', size: 10 } }, grid: { display: false } },
+      },
+    },
+  });
+}
+
+function renderTables() {
+  const d = state.data;
+  const totalSessions = d.channels.reduce((a, c) => a + c.sessions, 0) || 1;
+  $('#channelTable').innerHTML = `<table>
+    <thead><tr><th>채널</th><th class="num">세션</th><th class="num">사용자</th><th class="num">주요 이벤트</th></tr></thead>
+    <tbody>${d.channels.map((c) => `<tr>
+      <td>${c.channel}<div class="share-bar"><i style="width:${(c.sessions / totalSessions * 100).toFixed(1)}%"></i></div></td>
+      <td class="num">${fmt.format(c.sessions)}</td>
+      <td class="num">${fmt.format(c.activeUsers)}</td>
+      <td class="num">${fmt.format(c.keyEvents)}</td>
+    </tr>`).join('')}</tbody></table>`;
+
+  $('#pageTable').innerHTML = `<table>
+    <thead><tr><th>페이지 경로</th><th class="num">조회수</th><th class="num">사용자</th></tr></thead>
+    <tbody>${d.pages.map((p) => `<tr>
+      <td><span class="path" title="${p.pagePath}">${p.pagePath}</span></td>
+      <td class="num">${fmt.format(p.screenPageViews)}</td>
+      <td class="num">${fmt.format(p.activeUsers)}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+// ---- 실시간 ----
+async function pollRealtime() {
+  try {
+    const r = await fetch('/api/realtime');
+    const d = await r.json();
+    if (r.ok) $('#liveUsers').textContent = fmt.format(d.activeUsers);
+  } catch (e) { /* 다음 주기에 재시도 */ }
+}
+
+// ---- CSV ----
+$('#csvBtn').addEventListener('click', () => {
+  if (!state.data) return;
+  const rows = [['date', 'activeUsers', 'sessions', 'eventCount', 'keyEvents'],
+    ...state.data.daily.map((r) => [r.date, r.activeUsers, r.sessions, r.eventCount, r.keyEvents])];
+  const csv = rows.map((r) => r.join(',')).join('\n');
+  const url = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ga4_daily_${state.data.range.startDate}_${state.data.range.endDate}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ---- 컨트롤 ----
+document.querySelectorAll('.preset').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.preset').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+    btn.setAttribute('aria-pressed', 'true');
+    const { startDate, endDate } = rangeFromPreset(btn.dataset.days);
+    $('#customStart').value = startDate;
+    $('#customEnd').value = endDate;
+    load(startDate, endDate);
+  });
+});
+
+$('#applyCustom').addEventListener('click', () => {
+  const s = $('#customStart').value, e = $('#customEnd').value;
+  if (!s || !e) return alert('시작일과 종료일을 모두 선택해 주세요.');
+  if (s > e) return alert('시작일이 종료일보다 늦을 수 없습니다.');
+  document.querySelectorAll('.preset').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+  load(s, e);
+});
+
+// 초기 로드: 최근 7일
+const init = rangeFromPreset('7');
+$('#customStart').value = init.startDate;
+$('#customEnd').value = init.endDate;
+load(init.startDate, init.endDate);
+pollRealtime();
+setInterval(pollRealtime, 60000);
+</script>
+</body>
+</html>
