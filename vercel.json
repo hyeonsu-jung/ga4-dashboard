@@ -1,8 +1,12 @@
 {
-  "version": 2,
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/*.js": { "maxDuration": 30 }
+  },
+  "redirects": [
+    { "source": "/", "destination": "/index.html", "statusCode": 307 }
+  ],
   "rewrites": [
-    { "source": "/api/dashboard", "destination": "/api/dashboard.js" },
-    { "source": "/api/realtime", "destination": "/api/realtime.js" },
-    { "source": "/(.*)", "destination": "/public/$1" }
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
