@@ -79,12 +79,15 @@ module.exports = async (req, res) => {
       'userEngagementDuration',
     ];
 
-    const [batch] = await client.batchRunReports({
+    const range = [{ startDate, endDate }];
+
+    // batchRunReports는 배치당 최대 5개 요청 → 3개 배치로 분리, 병렬 실행
+    const batchA = client.batchRunReports({
       property,
       requests: [
         // 1. 현재 기간 KPI 합계
         {
-          dateRanges: [{ startDate, endDate }],
+          dateRanges: range,
           metrics: KPI_METRICS.map((name) => ({ name })),
         },
         // 2. 이전 기간 KPI 합계
@@ -94,7 +97,7 @@ module.exports = async (req, res) => {
         },
         // 3. 일별 추이
         {
-          dateRanges: [{ startDate, endDate }],
+          dateRanges: range,
           dimensions: [{ name: 'date' }],
           metrics: [
             { name: 'activeUsers' },
@@ -107,7 +110,7 @@ module.exports = async (req, res) => {
         },
         // 4. 채널별 유입
         {
-          dateRanges: [{ startDate, endDate }],
+          dateRanges: range,
           dimensions: [{ name: 'sessionDefaultChannelGroup' }],
           metrics: [{ name: 'sessions' }, { name: 'activeUsers' }, { name: 'keyEvents' }],
           orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
@@ -115,7 +118,7 @@ module.exports = async (req, res) => {
         },
         // 5. 인기 페이지
         {
-          dateRanges: [{ startDate, endDate }],
+          dateRanges: range,
           dimensions: [{ name: 'pagePath' }],
           metrics: [{ name: 'screenPageViews' }, { name: 'activeUsers' }],
           orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
@@ -124,7 +127,96 @@ module.exports = async (req, res) => {
       ],
     });
 
-    const [kpiNow, kpiPrev, trend, channels, pages] = batch.reports;
+    const batchB = client.batchRunReports({
+      property,
+      requests: [
+        // 6. 소스/매체
+        {
+          dateRanges: range,
+          dimensions: [{ name: 'sessionSourceMedium' }],
+          metrics: [{ name: 'totalUsers' }, { name: 'sessions' }, { name: 'keyEvents' }],
+          orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+          limit: 15,
+        },
+        // 7. 캠페인
+        {
+          dateRanges: range,
+          dimensions: [{ name: 'sessionCampaignName' }],
+          metrics: [{ name: 'totalUsers' }, { name: 'sessions' }, { name: 'keyEvents' }],
+          orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+          limit: 15,
+        },
+        // 8. 이벤트별 현황
+        {
+          dateRanges: range,
+          dimensions: [{ name: 'eventName' }],
+          metrics: [{ name: 'eventCount' }, { name: 'totalUsers' }],
+          orderBys: [{ metric: { metricName: 'eventCount' }, desc: true }],
+          limit: 15,
+        },
+        // 9. 기기 카테고리
+        {
+          dateRanges: range,
+          dimensions: [{ name: 'deviceCategory' }],
+          metrics: [{ name: 'activeUsers' }, { name: 'sessions' }, { name: 'engagementRate' }],
+          orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }],
+        },
+        // 10. 국가별 유입
+        {
+          dateRanges: range,
+          dimensions: [{ name: 'country' }],
+          metrics: [{ name: 'activeUsers' }, { name: 'sessions' }],
+          orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }],
+          limit: 10,
+        },
+      ],
+    });
+
+    // 인구통계(연령/성별/관심사)는 Google Signals 미활성화 시 실패·빈값 가능 → 별도 배치로 격리
+    const batchC = client
+      .batchRunReports({
+        property,
+        requests: [
+          {
+            dateRanges: range,
+            dimensions: [{ name: 'userAgeBracket' }],
+            metrics: [{ name: 'totalUsers' }, { name: 'engagementRate' }],
+            orderBys: [{ dimension: { dimensionName: 'userAgeBracket' } }],
+          },
+          {
+            dateRanges: range,
+            dimensions: [{ name: 'userGender' }],
+            metrics: [{ name: 'totalUsers' }],
+            orderBys: [{ metric: { metricName: 'totalUsers' }, desc: true }],
+          },
+          {
+            dateRanges: range,
+            dimensions: [{ name: 'brandingInterest' }],
+            metrics: [{ name: 'totalUsers' }],
+            orderBys: [{ metric: { metricName: 'totalUsers' }, desc: true }],
+            limit: 10,
+          },
+        ],
+      })
+      .catch((err) => {
+        console.warn('[api/dashboard] demographics unavailable:', err.message || err);
+        return null;
+      });
+
+    const [[resA], [resB], resC] = await Promise.all([batchA, batchB, batchC]);
+
+    const [kpiNow, kpiPrev, trend, channels, pages] = resA.reports;
+    const [sourceMedium, campaigns, events, devices, countries] = resB.reports;
+
+    const demoReports = resC && resC[0] ? resC[0].reports : null;
+    const demographics = demoReports
+      ? {
+          available: true,
+          ageBrackets: rowsToObjects(demoReports[0], ['bracket'], ['totalUsers', 'engagementRate']),
+          genders: rowsToObjects(demoReports[1], ['gender'], ['totalUsers']),
+          interests: rowsToObjects(demoReports[2], ['interest'], ['totalUsers']),
+        }
+      : { available: false, ageBrackets: [], genders: [], interests: [] };
 
     const toKpi = (report) => {
       const t = totalsFrom(report, KPI_METRICS);
@@ -160,6 +252,12 @@ module.exports = async (req, res) => {
       daily,
       channels: rowsToObjects(channels, ['channel'], ['sessions', 'activeUsers', 'keyEvents']),
       pages: rowsToObjects(pages, ['pagePath'], ['screenPageViews', 'activeUsers']),
+      sourceMedium: rowsToObjects(sourceMedium, ['sourceMedium'], ['totalUsers', 'sessions', 'keyEvents']),
+      campaigns: rowsToObjects(campaigns, ['campaign'], ['totalUsers', 'sessions', 'keyEvents']),
+      events: rowsToObjects(events, ['eventName'], ['eventCount', 'totalUsers']),
+      devices: rowsToObjects(devices, ['device'], ['activeUsers', 'sessions', 'engagementRate']),
+      countries: rowsToObjects(countries, ['country'], ['activeUsers', 'sessions']),
+      demographics,
     });
   } catch (err) {
     console.error('[api/dashboard]', err);

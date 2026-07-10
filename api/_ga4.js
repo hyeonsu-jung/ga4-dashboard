@@ -112,6 +112,89 @@ function demoDashboard(startDate, endDate, prevStart, prevEnd) {
     })
     .sort((a, b) => b.screenPageViews - a.screenPageViews);
 
+  const sourceMedium = [
+    'google / organic', 'google / cpc', '(direct) / (none)', 'naver / organic',
+    'meta / paid_social', 'newsletter / email', 'kakao / referral', 'youtube.com / referral',
+  ]
+    .map((sm) => {
+      const sessions = Math.round(300 + r() * 4500);
+      return {
+        sourceMedium: sm,
+        totalUsers: Math.round(sessions * 0.82),
+        sessions,
+        keyEvents: Math.round(sessions * (0.012 + r() * 0.02)),
+      };
+    })
+    .sort((a, b) => b.sessions - a.sessions);
+
+  const campaigns = [
+    '2026_summer_sale', 'brand_search_always_on', 'retargeting_july', 'newsletter_weekly',
+    'launch_teaser', '(not set)',
+  ]
+    .map((c) => {
+      const sessions = Math.round(200 + r() * 3200);
+      return {
+        campaign: c,
+        totalUsers: Math.round(sessions * 0.85),
+        sessions,
+        keyEvents: Math.round(sessions * (0.015 + r() * 0.025)),
+      };
+    })
+    .sort((a, b) => b.sessions - a.sessions);
+
+  const events = [
+    'page_view', 'session_start', 'user_engagement', 'scroll', 'first_visit',
+    'click', 'view_search_results', 'file_download', 'form_submit', 'video_start',
+  ]
+    .map((ev, i) => {
+      const count = Math.round((10000 - i * 800) * (0.7 + r() * 0.6));
+      return { eventName: ev, eventCount: count, totalUsers: Math.round(count * (0.25 + r() * 0.3)) };
+    })
+    .sort((a, b) => b.eventCount - a.eventCount);
+
+  const devices = [
+    { device: 'mobile', share: 0.62 },
+    { device: 'desktop', share: 0.33 },
+    { device: 'tablet', share: 0.05 },
+  ].map(({ device, share }) => {
+    const activeUsers = Math.round(sum(daily, 'activeUsers') * share);
+    return {
+      device,
+      activeUsers,
+      sessions: Math.round(activeUsers * 1.3),
+      engagementRate: 0.5 + r() * 0.25,
+    };
+  });
+
+  const countries = ['South Korea', 'United States', 'Japan', 'Vietnam', 'Taiwan', 'Singapore', 'Canada']
+    .map((country, i) => {
+      const activeUsers = Math.round((8000 - i * 1000) * (0.6 + r() * 0.5));
+      return { country, activeUsers, sessions: Math.round(activeUsers * 1.28) };
+    })
+    .sort((a, b) => b.activeUsers - a.activeUsers);
+
+  const demographics = {
+    available: true,
+    ageBrackets: ['18-24', '25-34', '35-44', '45-54', '55-64', '65+', 'unknown'].map((bracket) => ({
+      bracket,
+      totalUsers: Math.round(400 + r() * 3600),
+      engagementRate: 0.45 + r() * 0.3,
+    })),
+    genders: [
+      { gender: 'female', totalUsers: Math.round(3000 + r() * 3000) },
+      { gender: 'male', totalUsers: Math.round(3000 + r() * 3000) },
+      { gender: 'unknown', totalUsers: Math.round(500 + r() * 1500) },
+    ],
+    interests: [
+      'Shoppers', 'Technology/Technophiles', 'Media & Entertainment/Movie Lovers',
+      'Travel/Travel Buffs', 'Food & Dining/Cooking Enthusiasts', 'Sports & Fitness/Health & Fitness Buffs',
+      'Lifestyles & Hobbies/Business Professionals', 'Banking & Finance/Avid Investors',
+      'Beauty & Wellness/Beauty Mavens', 'Home & Garden/Home Decor Enthusiasts',
+    ]
+      .map((interest) => ({ interest, totalUsers: Math.round(300 + r() * 2800) }))
+      .sort((a, b) => b.totalUsers - a.totalUsers),
+  };
+
   return {
     demo: true,
     propertyId: 'DEMO',
@@ -123,6 +206,12 @@ function demoDashboard(startDate, endDate, prevStart, prevEnd) {
     daily,
     channels,
     pages,
+    sourceMedium,
+    campaigns,
+    events,
+    devices,
+    countries,
+    demographics,
   };
 }
 

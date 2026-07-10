@@ -149,6 +149,22 @@
     background: var(--primary-soft); border-color: var(--primary); color: var(--primary); font-weight: 600;
   }
   .chart-box { position: relative; height: 320px; }
+  .chart-box.small { height: 240px; }
+
+  .sub-h {
+    font-size: 0.85rem; font-weight: 700; margin-bottom: 10px;
+    display: flex; align-items: baseline; gap: 8px;
+  }
+  .sub-h .eyebrow { font-size: 0.62rem; }
+  .signals-note {
+    display: none;
+    background: #fdf3e2; border: 1px solid #eed7ac; color: #7a5410;
+    padding: 8px 14px; border-radius: 8px; margin-bottom: 14px; font-size: 0.8rem;
+  }
+  .signals-note.show { display: block; }
+  .widget-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  @media (max-width: 860px) { .widget-grid { grid-template-columns: 1fr; } }
+  .widget-grid + .widget-grid { margin-top: 22px; }
 
   .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
   @media (max-width: 860px) { .two-col { grid-template-columns: 1fr; } }
@@ -341,13 +357,78 @@
       <div id="pageTable"></div>
     </section>
   </div>
+
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <div class="eyebrow">Acquisition Detail</div>
+        <h2>마케팅 소스/매체 · 캠페인 성과</h2>
+      </div>
+      <div class="metric-toggle" id="acqToggle" role="group" aria-label="유입 상세 기준 선택"></div>
+    </div>
+    <div id="acqTable"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <div class="eyebrow">Demographics</div>
+        <h2>인구통계 · 타겟 분석</h2>
+      </div>
+    </div>
+    <div class="signals-note" id="signalsNote">
+      인구통계 데이터가 수집되지 않았습니다. GA4 속성에서 구글 신호(Google Signals)를 활성화해야 연령·성별·관심사 데이터가 수집되며, 활성화 이후 수집분부터 표시됩니다.
+    </div>
+    <div class="widget-grid">
+      <div>
+        <div class="sub-h">연령별 분포 <span class="eyebrow">Users · Engagement</span></div>
+        <div class="chart-box small"><canvas id="ageChart"></canvas></div>
+      </div>
+      <div>
+        <div class="sub-h">성별 비중 <span class="eyebrow">Users</span></div>
+        <div class="chart-box small"><canvas id="genderChart"></canvas></div>
+      </div>
+    </div>
+    <div class="widget-grid">
+      <div>
+        <div class="sub-h">관심사 TOP 10 <span class="eyebrow">Interests</span></div>
+        <div id="interestTable"></div>
+      </div>
+      <div>
+        <div class="sub-h">국가별 유입 <span class="eyebrow">Geography</span></div>
+        <div id="countryTable"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="two-col">
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <div class="eyebrow">Events</div>
+          <h2>이벤트 세부 분석</h2>
+        </div>
+      </div>
+      <div id="eventTable"></div>
+    </section>
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <div class="eyebrow">Device</div>
+          <h2>기기 환경</h2>
+        </div>
+      </div>
+      <div class="chart-box small"><canvas id="deviceChart"></canvas></div>
+      <div id="deviceTable" style="margin-top:14px"></div>
+    </section>
+  </div>
   </div>
 </main>
 
 <script>
 const $ = (s) => document.querySelector(s);
 const fmt = new Intl.NumberFormat('ko-KR');
-const state = { data: null, metric: 'activeUsers', chart: null, auth: null, realtimeTimer: null, allProperties: [] };
+const state = { data: null, metric: 'activeUsers', chart: null, charts: {}, acqMode: 'sourceMedium', auth: null, realtimeTimer: null, allProperties: [] };
 
 const KPI_DEFS = [
   { key: 'activeUsers', label: '활성 사용자', spark: 'activeUsers' },
@@ -355,6 +436,7 @@ const KPI_DEFS = [
   { key: 'sessions', label: '세션', spark: 'sessions' },
   { key: 'eventCount', label: '이벤트 수', spark: 'eventCount' },
   { key: 'keyEvents', label: '주요 이벤트 (전환)', spark: 'keyEvents' },
+  { key: 'engagementRate', label: '참여율', format: (v) => `${(v * 100).toFixed(1)}<span class="unit">%</span>` },
   { key: 'avgEngagementSeconds', label: '평균 참여 시간', format: (v) => {
       const m = Math.floor(v / 60), s = Math.round(v % 60);
       return `${m}<span class="unit">분</span> ${s}<span class="unit">초</span>`;
@@ -454,6 +536,28 @@ function render() {
   renderToggle();
   renderChart();
   renderTables();
+  renderAcqDetail();
+  renderDemographics();
+  renderEvents();
+  renderDevices();
+}
+
+const PALETTE = ['#0c5c4c', '#d98e24', '#3d7ea6', '#c24537', '#6b5b95', '#8aa66b', '#9db3ab'];
+
+function makeChart(key, canvasId, config) {
+  const ctx = $('#' + canvasId);
+  if (!ctx || typeof Chart === 'undefined') return;
+  if (state.charts[key]) state.charts[key].destroy();
+  state.charts[key] = new Chart(ctx, config);
+}
+
+function dimLabel(v) {
+  if (!v || v === '(not set)' || v === 'unknown' || v === '(other)') return '알 수 없음';
+  return v;
+}
+
+function genderLabel(v) {
+  return { male: '남성', female: '여성' }[v] || dimLabel(v);
 }
 
 function renderToggle() {
@@ -521,6 +625,198 @@ function renderTables() {
       <td class="num">${fmt.format(p.screenPageViews)}</td>
       <td class="num">${fmt.format(p.activeUsers)}</td>
     </tr>`).join('')}</tbody></table>`;
+}
+
+// ---- 유입 상세 (소스/매체 · 캠페인) ----
+const ACQ_MODES = [
+  { key: 'sourceMedium', label: '소스/매체', dim: 'sourceMedium', head: '소스 / 매체' },
+  { key: 'campaigns', label: '캠페인', dim: 'campaign', head: '캠페인' },
+];
+
+function renderAcqDetail() {
+  $('#acqToggle').innerHTML = ACQ_MODES.map((m) =>
+    `<button aria-pressed="${state.acqMode === m.key}" data-mode="${m.key}">${m.label}</button>`).join('');
+  $('#acqToggle').querySelectorAll('button').forEach((b) =>
+    b.addEventListener('click', () => { state.acqMode = b.dataset.mode; renderAcqDetail(); }));
+
+  const mode = ACQ_MODES.find((m) => m.key === state.acqMode);
+  const rows = state.data[mode.key] || [];
+  if (!rows.length) {
+    $('#acqTable').innerHTML = '<div class="state">해당 기간에 데이터가 없습니다.</div>';
+    return;
+  }
+  const totalSessions = rows.reduce((a, r) => a + r.sessions, 0) || 1;
+  $('#acqTable').innerHTML = `<table>
+    <thead><tr><th>${mode.head}</th><th class="num">사용자</th><th class="num">세션</th><th class="num">전환 (주요 이벤트)</th><th class="num">전환율</th></tr></thead>
+    <tbody>${rows.map((r) => `<tr>
+      <td>${escapeHtml(dimLabel(r[mode.dim]))}<div class="share-bar"><i style="width:${(r.sessions / totalSessions * 100).toFixed(1)}%"></i></div></td>
+      <td class="num">${fmt.format(r.totalUsers)}</td>
+      <td class="num">${fmt.format(r.sessions)}</td>
+      <td class="num">${fmt.format(r.keyEvents)}</td>
+      <td class="num">${r.sessions ? (r.keyEvents / r.sessions * 100).toFixed(2) : '0.00'}%</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+// ---- 인구통계 · 타겟 ----
+function renderDemographics() {
+  const d = state.data;
+  const demo = d.demographics || { available: false, ageBrackets: [], genders: [], interests: [] };
+
+  const known = (rows, key) => rows.filter((r) => r[key] !== 'unknown' && r[key] !== '(not set)' && r[key]);
+  const knownAges = known(demo.ageBrackets, 'bracket');
+  const knownGenders = known(demo.genders, 'gender');
+  const noSignals = !demo.available ||
+    (!knownAges.length && !knownGenders.length && !demo.interests.length);
+  $('#signalsNote').classList.toggle('show', noSignals);
+
+  // 연령별 바 차트 (사용자 수 + 툴팁에 참여율)
+  makeChart('age', 'ageChart', {
+    type: 'bar',
+    data: {
+      labels: demo.ageBrackets.map((r) => dimLabel(r.bracket)),
+      datasets: [{
+        label: '사용자',
+        data: demo.ageBrackets.map((r) => r.totalUsers),
+        backgroundColor: demo.ageBrackets.map((r) =>
+          r.bracket === 'unknown' ? '#c9d4cf' : '#0c5c4c'),
+        borderRadius: 4,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: {
+          label: (c) => {
+            const row = demo.ageBrackets[c.dataIndex];
+            return [`사용자: ${fmt.format(c.parsed.y)}`, `참여율: ${(row.engagementRate * 100).toFixed(1)}%`];
+          },
+        } },
+      },
+      scales: {
+        y: { beginAtZero: true, ticks: { callback: (v) => fmt.format(v), font: { family: 'IBM Plex Mono', size: 10 } }, grid: { color: '#eef2f0' } },
+        x: { ticks: { font: { family: 'IBM Plex Mono', size: 10 } }, grid: { display: false } },
+      },
+    },
+  });
+
+  // 성별 도넛 차트
+  const genderTotal = demo.genders.reduce((a, r) => a + r.totalUsers, 0) || 1;
+  makeChart('gender', 'genderChart', {
+    type: 'doughnut',
+    data: {
+      labels: demo.genders.map((r) => genderLabel(r.gender)),
+      datasets: [{
+        data: demo.genders.map((r) => r.totalUsers),
+        backgroundColor: demo.genders.map((r, i) =>
+          r.gender === 'unknown' ? '#c9d4cf' : PALETTE[i % PALETTE.length]),
+        borderWidth: 2, borderColor: '#ffffff',
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '58%',
+      plugins: {
+        legend: { position: 'right', labels: {
+          font: { size: 12 },
+          generateLabels: (chart) => chart.data.labels.map((label, i) => ({
+            text: `${label} ${(chart.data.datasets[0].data[i] / genderTotal * 100).toFixed(1)}%`,
+            fillStyle: chart.data.datasets[0].backgroundColor[i],
+            strokeStyle: '#fff', index: i,
+          })),
+        } },
+        tooltip: { callbacks: { label: (c) => `${c.label}: ${fmt.format(c.parsed)}명` } },
+      },
+    },
+  });
+
+  // 관심사 TOP 10 테이블
+  const interests = demo.interests || [];
+  const maxInterest = Math.max(...interests.map((r) => r.totalUsers), 1);
+  $('#interestTable').innerHTML = interests.length
+    ? `<table>
+      <thead><tr><th>#</th><th>관심 분야</th><th class="num">사용자</th></tr></thead>
+      <tbody>${interests.map((r, i) => `<tr>
+        <td class="num" style="width:32px">${i + 1}</td>
+        <td>${escapeHtml(dimLabel(r.interest))}<div class="share-bar"><i style="width:${(r.totalUsers / maxInterest * 100).toFixed(1)}%"></i></div></td>
+        <td class="num">${fmt.format(r.totalUsers)}</td>
+      </tr>`).join('')}</tbody></table>`
+    : '<div class="state">관심사 데이터가 없습니다.</div>';
+
+  // 국가별 유입 테이블
+  const countries = d.countries || [];
+  const maxCountry = Math.max(...countries.map((r) => r.activeUsers), 1);
+  $('#countryTable').innerHTML = countries.length
+    ? `<table>
+      <thead><tr><th>국가</th><th class="num">사용자</th><th class="num">세션</th></tr></thead>
+      <tbody>${countries.map((r) => `<tr>
+        <td>${escapeHtml(dimLabel(r.country))}<div class="share-bar"><i style="width:${(r.activeUsers / maxCountry * 100).toFixed(1)}%"></i></div></td>
+        <td class="num">${fmt.format(r.activeUsers)}</td>
+        <td class="num">${fmt.format(r.sessions)}</td>
+      </tr>`).join('')}</tbody></table>`
+    : '<div class="state">국가 데이터가 없습니다.</div>';
+}
+
+// ---- 이벤트 세부 분석 ----
+function renderEvents() {
+  const rows = state.data.events || [];
+  if (!rows.length) {
+    $('#eventTable').innerHTML = '<div class="state">이벤트 데이터가 없습니다.</div>';
+    return;
+  }
+  const maxCount = Math.max(...rows.map((r) => r.eventCount), 1);
+  $('#eventTable').innerHTML = `<table>
+    <thead><tr><th>이벤트 이름</th><th class="num">이벤트 수</th><th class="num">사용자</th><th class="num">사용자당 횟수</th></tr></thead>
+    <tbody>${rows.map((r) => `<tr>
+      <td><span class="path" title="${escapeHtml(r.eventName)}">${escapeHtml(r.eventName)}</span>
+        <div class="share-bar"><i style="width:${(r.eventCount / maxCount * 100).toFixed(1)}%"></i></div></td>
+      <td class="num">${fmt.format(r.eventCount)}</td>
+      <td class="num">${fmt.format(r.totalUsers)}</td>
+      <td class="num">${r.totalUsers ? (r.eventCount / r.totalUsers).toFixed(1) : '–'}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+// ---- 기기 환경 ----
+function renderDevices() {
+  const rows = state.data.devices || [];
+  const deviceKo = { mobile: '모바일', desktop: 'PC', tablet: '태블릿' };
+  const total = rows.reduce((a, r) => a + r.activeUsers, 0) || 1;
+
+  makeChart('device', 'deviceChart', {
+    type: 'doughnut',
+    data: {
+      labels: rows.map((r) => deviceKo[r.device] || dimLabel(r.device)),
+      datasets: [{
+        data: rows.map((r) => r.activeUsers),
+        backgroundColor: rows.map((_, i) => PALETTE[i % PALETTE.length]),
+        borderWidth: 2, borderColor: '#ffffff',
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '58%',
+      plugins: {
+        legend: { position: 'right', labels: {
+          font: { size: 12 },
+          generateLabels: (chart) => chart.data.labels.map((label, i) => ({
+            text: `${label} ${(chart.data.datasets[0].data[i] / total * 100).toFixed(1)}%`,
+            fillStyle: chart.data.datasets[0].backgroundColor[i],
+            strokeStyle: '#fff', index: i,
+          })),
+        } },
+        tooltip: { callbacks: { label: (c) => `${c.label}: ${fmt.format(c.parsed)}명` } },
+      },
+    },
+  });
+
+  $('#deviceTable').innerHTML = rows.length
+    ? `<table>
+      <thead><tr><th>기기</th><th class="num">사용자</th><th class="num">세션</th><th class="num">참여율</th></tr></thead>
+      <tbody>${rows.map((r) => `<tr>
+        <td>${deviceKo[r.device] || escapeHtml(dimLabel(r.device))}</td>
+        <td class="num">${fmt.format(r.activeUsers)}</td>
+        <td class="num">${fmt.format(r.sessions)}</td>
+        <td class="num">${(r.engagementRate * 100).toFixed(1)}%</td>
+      </tr>`).join('')}</tbody></table>`
+    : '<div class="state">기기 데이터가 없습니다.</div>';
 }
 
 // ---- 인증 / 속성 선택 ----
