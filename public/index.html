@@ -994,15 +994,19 @@ function renderDemographics() {
   // 관심사 TOP 10 테이블
   const interests = demo.interests || [];
   const maxInterest = Math.max(...interests.map((r) => r.totalUsers), 1);
+  const fb = demo.interestsFallbackRange;
+  const fallbackNote = fb
+    ? `<div style="font-size:0.75rem;color:var(--muted);margin-bottom:8px">선택 기간은 개인정보 보호 임계값 미만이라 <b>최근 30일(${escapeHtml(fb.startDate)} ~ ${escapeHtml(fb.endDate)})</b> 기준으로 표시합니다.</div>`
+    : '';
   $('#interestTable').innerHTML = interests.length
-    ? `<table>
+    ? `${fallbackNote}<table>
       <thead><tr><th>#</th><th>관심 분야</th><th class="num">사용자</th></tr></thead>
       <tbody>${interests.map((r, i) => `<tr>
         <td class="num" style="width:32px">${i + 1}</td>
         <td>${escapeHtml(dimLabel(r.interest))}<div class="share-bar"><i style="width:${(r.totalUsers / maxInterest * 100).toFixed(1)}%"></i></div></td>
         <td class="num">${fmt.format(r.totalUsers)}</td>
       </tr>`).join('')}</tbody></table>`
-    : '<div class="state">관심사 데이터가 없습니다.</div>';
+    : '<div class="state">관심사 데이터가 없습니다.<br/><span style="font-size:0.78rem">기간이 짧거나 사용자 수가 적으면 GA4 개인정보 보호 임계값에 의해 데이터가 숨겨질 수 있습니다. 조회 기간을 넓혀보세요.</span></div>';
 
   // 국가별 유입 테이블
   const countries = d.countries || [];

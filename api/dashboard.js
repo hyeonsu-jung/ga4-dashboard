@@ -270,6 +270,15 @@ module.exports = async (req, res) => {
             orderBys: [{ metric: { metricName: 'totalUsers' }, desc: true }],
             limit: 10,
           },
+          // 관심사 폴백: 짧은 기간은 GA4 개인정보 보호 임계값에 걸려 0행이 되는 경우가
+          // 많아, 종료일 기준 최근 30일 데이터를 함께 조회해 둔다.
+          {
+            dateRanges: [{ startDate: shiftDate(endDate, -29), endDate }],
+            dimensions: [{ name: 'brandingInterest' }],
+            metrics: [{ name: 'totalUsers' }],
+            orderBys: [{ metric: { metricName: 'totalUsers' }, desc: true }],
+            limit: 10,
+          },
         ].map(withFilter),
       })
       .catch((err) => {
@@ -284,14 +293,20 @@ module.exports = async (req, res) => {
     const [prevTrend, landingPages, evDaily, evPrevTotal] = resD.reports;
 
     const demoReports = resC && resC[0] ? resC[0].reports : null;
-    const demographics = demoReports
-      ? {
-          available: true,
-          ageBrackets: rowsToObjects(demoReports[0], ['bracket'], ['totalUsers', 'engagementRate']),
-          genders: rowsToObjects(demoReports[1], ['gender'], ['totalUsers']),
-          interests: rowsToObjects(demoReports[2], ['interest'], ['totalUsers']),
-        }
-      : { available: false, ageBrackets: [], genders: [], interests: [] };
+    let demographics = { available: false, ageBrackets: [], genders: [], interests: [], interestsFallbackRange: null };
+    if (demoReports) {
+      const interestsPrimary = rowsToObjects(demoReports[2], ['interest'], ['totalUsers']);
+      const interestsExtended = rowsToObjects(demoReports[3], ['interest'], ['totalUsers']);
+      // 선택 기간에 데이터가 없으면(임계값) 최근 30일 데이터로 폴백
+      const useFallback = !interestsPrimary.length && interestsExtended.length > 0;
+      demographics = {
+        available: true,
+        ageBrackets: rowsToObjects(demoReports[0], ['bracket'], ['totalUsers', 'engagementRate']),
+        genders: rowsToObjects(demoReports[1], ['gender'], ['totalUsers']),
+        interests: useFallback ? interestsExtended : interestsPrimary,
+        interestsFallbackRange: useFallback ? { startDate: shiftDate(endDate, -29), endDate } : null,
+      };
+    }
 
     const toKpi = (report) => {
       const t = totalsFrom(report, KPI_METRICS);

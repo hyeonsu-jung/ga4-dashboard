@@ -231,6 +231,7 @@ function demoDashboard(startDate, endDate, prevStart, prevEnd, opts = {}) {
     ]
       .map((interest) => ({ interest, totalUsers: Math.round(300 + r() * 2800) }))
       .sort((a, b) => b.totalUsers - a.totalUsers),
+    interestsFallbackRange: null,
   };
 
   return {
