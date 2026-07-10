@@ -78,9 +78,19 @@ function sum(rows, key) {
   return rows.reduce((a, r) => a + r[key], 0);
 }
 
-function demoDashboard(startDate, endDate, prevStart, prevEnd) {
-  const daily = demoDaily(startDate, endDate);
-  const prevDaily = demoDaily(prevStart, prevEnd);
+function demoDashboard(startDate, endDate, prevStart, prevEnd, opts = {}) {
+  const { device = null, channel = null, keyEvent = null } = opts;
+  // 데모 모드에서 필터는 데이터를 일정 비율로 축소해 흉내냅니다.
+  const filterScale = (device ? { mobile: 0.62, desktop: 0.33, tablet: 0.05 }[device] || 1 : 1) * (channel ? 0.35 : 1);
+  const scaleRow = (row) => {
+    const out = { ...row };
+    for (const k of Object.keys(out)) {
+      if (typeof out[k] === 'number' && !k.toLowerCase().includes('rate')) out[k] = Math.round(out[k] * filterScale);
+    }
+    return out;
+  };
+  const daily = demoDaily(startDate, endDate).map(scaleRow);
+  const prevDaily = demoDaily(prevStart, prevEnd).map(scaleRow);
   const kpiFrom = (rows) => {
     const sessions = sum(rows, 'sessions');
     return {
@@ -104,6 +114,7 @@ function demoDashboard(startDate, endDate, prevStart, prevEnd) {
         keyEvents: Math.round(sessions * (0.015 + r() * 0.02)),
       };
     })
+    .filter((c) => !channel || c.channel === channel)
     .sort((a, b) => b.sessions - a.sessions);
   const pages = ['/', '/products', '/pricing', '/blog/ga4-guide', '/contact', '/event/2026-summer', '/login', '/help']
     .map((p) => {
@@ -173,6 +184,33 @@ function demoDashboard(startDate, endDate, prevStart, prevEnd) {
     })
     .sort((a, b) => b.activeUsers - a.activeUsers);
 
+  const landingPages = ['/', '/event/2026-summer', '/products', '/pricing', '/blog/ga4-guide', '/landing/promo', '/signup']
+    .map((lp) => {
+      const sessions = Math.round(250 + r() * 4200);
+      return {
+        landingPage: lp,
+        sessions,
+        totalUsers: Math.round(sessions * 0.83),
+        keyEvents: Math.round(sessions * (0.01 + r() * 0.03)),
+        engagementRate: 0.45 + r() * 0.35,
+      };
+    })
+    .sort((a, b) => b.sessions - a.sessions);
+
+  let selectedEvent = null;
+  if (keyEvent) {
+    const evDaily = daily.map((d) => ({
+      date: d.date,
+      eventCount: Math.round(d.eventCount * (0.04 + seededRandom(keyEvent + d.date)() * 0.04)),
+    }));
+    selectedEvent = {
+      name: keyEvent,
+      eventCount: evDaily.reduce((a, x) => a + x.eventCount, 0),
+      prevEventCount: Math.round(evDaily.reduce((a, x) => a + x.eventCount, 0) * (0.8 + r() * 0.35)),
+      daily: evDaily,
+    };
+  }
+
   const demographics = {
     available: true,
     ageBrackets: ['18-24', '25-34', '35-44', '45-54', '55-64', '65+', 'unknown'].map((bracket) => ({
@@ -201,11 +239,15 @@ function demoDashboard(startDate, endDate, prevStart, prevEnd) {
     propertyName: '데모 데이터',
     range: { startDate, endDate },
     compareRange: { startDate: prevStart, endDate: prevEnd },
+    filters: { device, channel },
     kpis: kpiFrom(daily),
     prevKpis: kpiFrom(prevDaily),
     daily,
+    prevDaily,
     channels,
     pages,
+    landingPages,
+    selectedEvent,
     sourceMedium,
     campaigns,
     events,

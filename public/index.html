@@ -101,6 +101,39 @@
     padding: 7px 14px; font-size: 0.82rem; color: var(--muted);
   }
   .csv-btn:hover { border-color: var(--primary); color: var(--primary); }
+  .filter-sel {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 0.82rem; color: var(--muted);
+  }
+  .filter-sel select {
+    font-family: var(--sans); font-size: 0.83rem; padding: 6px 8px;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink);
+  }
+  .filter-sel select.active { border-color: var(--primary); color: var(--primary); font-weight: 600; }
+
+  .anomaly-note {
+    display: none; margin-top: 10px; font-size: 0.78rem; color: var(--down);
+    font-family: var(--mono);
+  }
+  .anomaly-note.show { display: block; }
+
+  .key-event-summary {
+    display: none; background: var(--primary-soft); border: 1px solid var(--primary);
+    border-radius: 10px; padding: 10px 14px; margin-bottom: 12px;
+    font-size: 0.85rem; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  .key-event-summary.show { display: flex; }
+  .key-event-summary .ev-name { font-family: var(--mono); font-weight: 600; color: var(--primary); }
+  .key-event-summary .clear-btn {
+    margin-left: auto; border: 1px solid var(--primary); background: none; color: var(--primary);
+    border-radius: 6px; padding: 3px 10px; font-size: 0.75rem;
+  }
+  .row-btn {
+    border: 1px solid var(--line); background: none; color: var(--muted);
+    border-radius: 6px; padding: 2px 8px; font-size: 0.7rem; white-space: nowrap;
+  }
+  .row-btn:hover { border-color: var(--primary); color: var(--primary); }
+  .row-btn[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: #fff; }
 
   /* ---- KPI 카드 ---- */
   .kpi-grid {
@@ -321,6 +354,19 @@
       <input type="date" id="customEnd" aria-label="종료일" />
       <button class="apply-btn" id="applyCustom">적용</button>
     </span>
+    <label class="filter-sel">기기
+      <select id="deviceFilter" aria-label="기기 필터">
+        <option value="">전체</option>
+        <option value="mobile">모바일</option>
+        <option value="desktop">PC</option>
+        <option value="tablet">태블릿</option>
+      </select>
+    </label>
+    <label class="filter-sel">채널
+      <select id="channelFilter" aria-label="채널 필터">
+        <option value="">전체</option>
+      </select>
+    </label>
     <button class="csv-btn" id="csvBtn">일별 데이터 CSV 내려받기</button>
   </div>
 
@@ -335,6 +381,7 @@
       <div class="metric-toggle" id="metricToggle" role="group" aria-label="추이 지표 선택"></div>
     </div>
     <div class="chart-box"><canvas id="trendChart"></canvas></div>
+    <div class="anomaly-note" id="anomalyNote"></div>
   </section>
 
   <div class="two-col">
@@ -367,6 +414,16 @@
       <div class="metric-toggle" id="acqToggle" role="group" aria-label="유입 상세 기준 선택"></div>
     </div>
     <div id="acqTable"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <div class="eyebrow">Landing Pages</div>
+        <h2>랜딩 페이지 성과</h2>
+      </div>
+    </div>
+    <div id="landingTable"></div>
   </section>
 
   <section class="card">
@@ -409,6 +466,7 @@
           <h2>이벤트 세부 분석</h2>
         </div>
       </div>
+      <div class="key-event-summary" id="keyEventSummary"></div>
       <div id="eventTable"></div>
     </section>
     <section class="card">
@@ -428,7 +486,13 @@
 <script>
 const $ = (s) => document.querySelector(s);
 const fmt = new Intl.NumberFormat('ko-KR');
-const state = { data: null, metric: 'activeUsers', chart: null, charts: {}, acqMode: 'sourceMedium', auth: null, realtimeTimer: null, allProperties: [] };
+const state = {
+  data: null, metric: 'activeUsers', chart: null, charts: {}, acqMode: 'sourceMedium',
+  auth: null, realtimeTimer: null, allProperties: [],
+  filters: { device: '', channel: '' },
+  keyEvent: localStorage.getItem('ga4_key_event') || '',
+  channelOptions: [],
+};
 
 const KPI_DEFS = [
   { key: 'activeUsers', label: '활성 사용자', spark: 'activeUsers' },
@@ -470,7 +534,11 @@ function rangeFromPreset(preset) {
 async function load(startDate, endDate) {
   $('#kpiGrid').innerHTML = '<div class="state">데이터를 불러오는 중…</div>';
   try {
-    const r = await fetch(`/api/dashboard?startDate=${startDate}&endDate=${endDate}`);
+    const params = new URLSearchParams({ startDate, endDate });
+    if (state.filters.device) params.set('device', state.filters.device);
+    if (state.filters.channel) params.set('channel', state.filters.channel);
+    if (state.keyEvent) params.set('keyEvent', state.keyEvent);
+    const r = await fetch(`/api/dashboard?${params}`);
     const data = await r.json();
     if (r.status === 401) {
       if (data.error === 'PROPERTY_REQUIRED') {
@@ -491,6 +559,11 @@ async function load(startDate, endDate) {
   } catch (e) {
     $('#kpiGrid').innerHTML = `<div class="state error">데이터를 불러오지 못했습니다. ${e.message}<br/>기간을 다시 선택해 조회할 수 있습니다.</div>`;
   }
+}
+
+function reload() {
+  const s = $('#customStart').value, e = $('#customEnd').value;
+  if (s && e) load(s, e);
 }
 
 function deltaHtml(now, prev) {
@@ -533,13 +606,64 @@ function render() {
     </article>`;
   }).join('');
 
+  updateFilterControls();
   renderToggle();
   renderChart();
   renderTables();
   renderAcqDetail();
+  renderLanding();
   renderDemographics();
   renderEvents();
   renderDevices();
+}
+
+// ---- 전역 필터 (기기 / 채널) ----
+function updateFilterControls() {
+  const d = state.data;
+  // 채널 옵션은 필터 미적용 상태의 응답에서만 갱신 (필터 적용 시 목록이 좁아지는 것 방지)
+  if (!state.filters.channel && d.channels?.length) {
+    state.channelOptions = d.channels.map((c) => c.channel);
+  }
+  const sel = $('#channelFilter');
+  const current = state.filters.channel;
+  sel.innerHTML = '<option value="">전체</option>' + state.channelOptions.map((ch) =>
+    `<option value="${escapeHtml(ch)}"${ch === current ? ' selected' : ''}>${escapeHtml(ch)}</option>`).join('');
+  if (current && !state.channelOptions.includes(current)) {
+    sel.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(current)}" selected>${escapeHtml(current)}</option>`);
+  }
+  $('#deviceFilter').value = state.filters.device;
+  $('#deviceFilter').classList.toggle('active', !!state.filters.device);
+  sel.classList.toggle('active', !!current);
+}
+
+$('#deviceFilter').addEventListener('change', (e) => {
+  state.filters.device = e.target.value;
+  reload();
+});
+$('#channelFilter').addEventListener('change', (e) => {
+  state.filters.channel = e.target.value;
+  reload();
+});
+
+// ---- 랜딩 페이지 성과 ----
+function renderLanding() {
+  const rows = state.data.landingPages || [];
+  if (!rows.length) {
+    $('#landingTable').innerHTML = '<div class="state">랜딩 페이지 데이터가 없습니다.</div>';
+    return;
+  }
+  const totalSessions = rows.reduce((a, r) => a + r.sessions, 0) || 1;
+  $('#landingTable').innerHTML = `<table>
+    <thead><tr><th>랜딩 페이지</th><th class="num">세션</th><th class="num">사용자</th><th class="num">전환 (주요 이벤트)</th><th class="num">전환율</th><th class="num">참여율</th></tr></thead>
+    <tbody>${rows.map((r) => `<tr>
+      <td><span class="path" title="${escapeHtml(r.landingPage)}">${escapeHtml(dimLabel(r.landingPage))}</span>
+        <div class="share-bar"><i style="width:${(r.sessions / totalSessions * 100).toFixed(1)}%"></i></div></td>
+      <td class="num">${fmt.format(r.sessions)}</td>
+      <td class="num">${fmt.format(r.totalUsers)}</td>
+      <td class="num">${fmt.format(r.keyEvents)}</td>
+      <td class="num">${r.sessions ? (r.keyEvents / r.sessions * 100).toFixed(2) : '0.00'}%</td>
+      <td class="num">${(r.engagementRate * 100).toFixed(1)}%</td>
+    </tr>`).join('')}</tbody></table>`;
 }
 
 const PALETTE = ['#0c5c4c', '#d98e24', '#3d7ea6', '#c24537', '#6b5b95', '#8aa66b', '#9db3ab'];
@@ -575,28 +699,77 @@ function renderChart() {
     ctx.parentElement.innerHTML = '<div class="state error">차트 라이브러리를 불러오지 못했습니다. 페이지를 새로고침해 주세요.</div>';
     return;
   }
+
+  const values = d.daily.map((r) => r[state.metric]);
+
+  // 이상 감지: 평균 ±2σ 벗어난 날 하이라이트
+  const mean = values.reduce((a, v) => a + v, 0) / (values.length || 1);
+  const sd = Math.sqrt(values.reduce((a, v) => a + (v - mean) ** 2, 0) / (values.length || 1));
+  const anomalies = sd > 0 && values.length >= 7
+    ? values.map((v, i) => ({ v, i, z: (v - mean) / sd })).filter((x) => Math.abs(x.z) > 2)
+    : [];
+  const anomalyIdx = new Set(anomalies.map((x) => x.i));
+
+  const note = $('#anomalyNote');
+  if (anomalies.length) {
+    note.textContent = '⚠ 이상 감지(평균 ±2σ 초과): ' + anomalies.map((x) =>
+      `${d.daily[x.i].date.slice(5)} (${x.z > 0 ? '+' : ''}${x.z.toFixed(1)}σ)`).join(' · ');
+    note.classList.add('show');
+  } else {
+    note.classList.remove('show');
+  }
+
+  const baseRadius = d.daily.length > 45 ? 0 : 2.5;
+  const prevValues = (d.prevDaily || []).map((r) => r[state.metric]);
+
   if (state.chart) state.chart.destroy();
   state.chart = new Chart(ctx, {
     type: 'line',
     data: {
       labels: d.daily.map((r) => r.date.slice(5)),
-      datasets: [{
-        label,
-        data: d.daily.map((r) => r[state.metric]),
-        borderColor: '#0c5c4c',
-        backgroundColor: 'rgba(12,92,76,0.08)',
-        fill: true,
-        tension: 0.25,
-        pointRadius: d.daily.length > 45 ? 0 : 2.5,
-        borderWidth: 2,
-      }],
+      datasets: [
+        {
+          label,
+          data: values,
+          borderColor: '#0c5c4c',
+          backgroundColor: 'rgba(12,92,76,0.08)',
+          fill: true,
+          tension: 0.25,
+          pointRadius: values.map((_, i) => (anomalyIdx.has(i) ? 5 : baseRadius)),
+          pointBackgroundColor: values.map((_, i) => (anomalyIdx.has(i) ? '#c24537' : '#0c5c4c')),
+          pointBorderColor: values.map((_, i) => (anomalyIdx.has(i) ? '#c24537' : '#0c5c4c')),
+          borderWidth: 2,
+          order: 1,
+        },
+        {
+          label: '이전 기간',
+          data: prevValues,
+          borderColor: '#9db3ab',
+          borderDash: [5, 4],
+          fill: false,
+          tension: 0.25,
+          pointRadius: 0,
+          borderWidth: 1.5,
+          order: 2,
+        },
+      ],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: (c) => `${label}: ${fmt.format(c.parsed.y)}` } },
+        legend: { display: true, labels: { boxWidth: 18, font: { size: 11 } } },
+        tooltip: { callbacks: {
+          label: (c) => `${c.dataset.label}: ${fmt.format(c.parsed.y)}`,
+          afterBody: (items) => {
+            const i = items[0]?.dataIndex;
+            const notes = [];
+            if (i != null && anomalyIdx.has(i)) notes.push('⚠ 평소 대비 이상치');
+            if (i != null && d.prevDaily?.[i]) notes.push(`이전 기간 날짜: ${d.prevDaily[i].date.slice(5)}`);
+            return notes;
+          },
+        } },
       },
       scales: {
         y: { beginAtZero: true, ticks: { callback: (v) => fmt.format(v), font: { family: 'IBM Plex Mono', size: 10 } }, grid: { color: '#eef2f0' } },
@@ -756,8 +929,37 @@ function renderDemographics() {
     : '<div class="state">국가 데이터가 없습니다.</div>';
 }
 
-// ---- 이벤트 세부 분석 ----
+// ---- 이벤트 세부 분석 · 전환 이벤트 지정 ----
+function setKeyEvent(name) {
+  state.keyEvent = name;
+  if (name) localStorage.setItem('ga4_key_event', name);
+  else localStorage.removeItem('ga4_key_event');
+  reload();
+}
+
+function renderKeyEventSummary() {
+  const d = state.data;
+  const box = $('#keyEventSummary');
+  const ev = d.selectedEvent;
+  if (!ev) {
+    box.classList.remove('show');
+    box.innerHTML = '';
+    return;
+  }
+  const sessions = d.kpis.sessions || 0;
+  const rate = sessions ? (ev.eventCount / sessions * 100) : 0;
+  box.innerHTML = `
+    <span>전환 이벤트 <span class="ev-name">${escapeHtml(ev.name)}</span></span>
+    <span>발생 <b>${fmt.format(ev.eventCount)}</b>회</span>
+    <span>세션 대비 전환율 <b>${rate.toFixed(2)}%</b></span>
+    ${deltaHtml(ev.eventCount, ev.prevEventCount)}
+    <button type="button" class="clear-btn" id="clearKeyEventBtn">해제</button>`;
+  box.classList.add('show');
+  $('#clearKeyEventBtn').addEventListener('click', () => setKeyEvent(''));
+}
+
 function renderEvents() {
+  renderKeyEventSummary();
   const rows = state.data.events || [];
   if (!rows.length) {
     $('#eventTable').innerHTML = '<div class="state">이벤트 데이터가 없습니다.</div>';
@@ -765,14 +967,18 @@ function renderEvents() {
   }
   const maxCount = Math.max(...rows.map((r) => r.eventCount), 1);
   $('#eventTable').innerHTML = `<table>
-    <thead><tr><th>이벤트 이름</th><th class="num">이벤트 수</th><th class="num">사용자</th><th class="num">사용자당 횟수</th></tr></thead>
+    <thead><tr><th>이벤트 이름</th><th class="num">이벤트 수</th><th class="num">사용자</th><th class="num">사용자당 횟수</th><th></th></tr></thead>
     <tbody>${rows.map((r) => `<tr>
       <td><span class="path" title="${escapeHtml(r.eventName)}">${escapeHtml(r.eventName)}</span>
         <div class="share-bar"><i style="width:${(r.eventCount / maxCount * 100).toFixed(1)}%"></i></div></td>
       <td class="num">${fmt.format(r.eventCount)}</td>
       <td class="num">${fmt.format(r.totalUsers)}</td>
       <td class="num">${r.totalUsers ? (r.eventCount / r.totalUsers).toFixed(1) : '–'}</td>
+      <td class="num"><button type="button" class="row-btn" data-event="${escapeHtml(r.eventName)}"
+        aria-pressed="${state.keyEvent === r.eventName}">${state.keyEvent === r.eventName ? '전환 ✓' : '전환 지정'}</button></td>
     </tr>`).join('')}</tbody></table>`;
+  $('#eventTable').querySelectorAll('.row-btn').forEach((b) =>
+    b.addEventListener('click', () => setKeyEvent(b.dataset.event === state.keyEvent ? '' : b.dataset.event)));
 }
 
 // ---- 기기 환경 ----

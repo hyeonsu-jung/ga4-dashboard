@@ -37,14 +37,22 @@ function totalsFrom(report, metricNames) {
   return o;
 }
 
+const DEVICE_VALUES = ['mobile', 'desktop', 'tablet'];
+
 module.exports = async (req, res) => {
   try {
-    const { startDate, endDate } = req.query || {};
+    const { startDate, endDate, device, channel, keyEvent } = req.query || {};
     if (!DATE_RE.test(startDate || '') || !DATE_RE.test(endDate || '')) {
       return res.status(400).json({ error: 'startDate, endDate는 YYYY-MM-DD 형식이어야 합니다.' });
     }
     if (startDate > endDate) {
       return res.status(400).json({ error: 'startDate가 endDate보다 늦을 수 없습니다.' });
+    }
+    if (device && !DEVICE_VALUES.includes(device)) {
+      return res.status(400).json({ error: 'device는 mobile, desktop, tablet 중 하나여야 합니다.' });
+    }
+    if ((channel && channel.length > 100) || (keyEvent && keyEvent.length > 100)) {
+      return res.status(400).json({ error: '필터 값이 너무 깁니다.' });
     }
 
     // 이전 동기간 계산 (같은 일수만큼 직전 구간)
@@ -54,7 +62,7 @@ module.exports = async (req, res) => {
     const prevStart = shiftDate(prevEnd, -(spanDays - 1));
 
     if (!isOAuthConfigured()) {
-      return res.status(200).json(demoDashboard(startDate, endDate, prevStart, prevEnd));
+      return res.status(200).json(demoDashboard(startDate, endDate, prevStart, prevEnd, { device, channel, keyEvent }));
     }
 
     const session = getSession(req);
@@ -80,8 +88,24 @@ module.exports = async (req, res) => {
     ];
 
     const range = [{ startDate, endDate }];
+    const prevRange = [{ startDate: prevStart, endDate: prevEnd }];
 
-    // batchRunReports는 배치당 최대 5개 요청 → 3개 배치로 분리, 병렬 실행
+    // 전역 필터 (기기 / 채널) — 모든 리포트에 공통 적용
+    const filterExprs = [];
+    if (device) {
+      filterExprs.push({ filter: { fieldName: 'deviceCategory', stringFilter: { value: device } } });
+    }
+    if (channel) {
+      filterExprs.push({ filter: { fieldName: 'sessionDefaultChannelGroup', stringFilter: { value: channel } } });
+    }
+    const combine = (exprs) =>
+      exprs.length === 0 ? undefined : exprs.length === 1 ? exprs[0] : { andGroup: { expressions: exprs } };
+    const globalFilter = combine(filterExprs);
+    const withFilter = (r) => (globalFilter ? { ...r, dimensionFilter: globalFilter } : r);
+    const eventNameFilter = (name) =>
+      combine([...filterExprs, { filter: { fieldName: 'eventName', stringFilter: { value: name } } }]);
+
+    // batchRunReports는 배치당 최대 5개 요청 → 여러 배치로 분리, 병렬 실행
     const batchA = client.batchRunReports({
       property,
       requests: [
@@ -124,7 +148,7 @@ module.exports = async (req, res) => {
           orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
           limit: 10,
         },
-      ],
+      ].map(withFilter),
     });
 
     const batchB = client.batchRunReports({
@@ -169,8 +193,58 @@ module.exports = async (req, res) => {
           orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }],
           limit: 10,
         },
-      ],
+      ].map(withFilter),
     });
+
+    // 이전 기간 추이 + 랜딩 페이지 + (선택 시) 전환 지정 이벤트
+    const batchDRequests = [
+      // 11. 이전 기간 일별 추이
+      {
+        dateRanges: prevRange,
+        dimensions: [{ name: 'date' }],
+        metrics: [
+          { name: 'activeUsers' },
+          { name: 'sessions' },
+          { name: 'eventCount' },
+          { name: 'keyEvents' },
+        ],
+        orderBys: [{ dimension: { dimensionName: 'date' } }],
+        limit: 400,
+      },
+      // 12. 랜딩 페이지 성과
+      {
+        dateRanges: range,
+        dimensions: [{ name: 'landingPage' }],
+        metrics: [
+          { name: 'sessions' },
+          { name: 'totalUsers' },
+          { name: 'keyEvents' },
+          { name: 'engagementRate' },
+        ],
+        orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+        limit: 10,
+      },
+    ].map(withFilter);
+    if (keyEvent) {
+      batchDRequests.push(
+        // 13. 선택 이벤트 일별 추이 (현재 기간)
+        {
+          dateRanges: range,
+          dimensions: [{ name: 'date' }],
+          metrics: [{ name: 'eventCount' }],
+          dimensionFilter: eventNameFilter(keyEvent),
+          orderBys: [{ dimension: { dimensionName: 'date' } }],
+          limit: 400,
+        },
+        // 14. 선택 이벤트 합계 (이전 기간)
+        {
+          dateRanges: prevRange,
+          metrics: [{ name: 'eventCount' }],
+          dimensionFilter: eventNameFilter(keyEvent),
+        }
+      );
+    }
+    const batchD = client.batchRunReports({ property, requests: batchDRequests });
 
     // 인구통계(연령/성별/관심사)는 Google Signals 미활성화 시 실패·빈값 가능 → 별도 배치로 격리
     const batchC = client
@@ -196,17 +270,18 @@ module.exports = async (req, res) => {
             orderBys: [{ metric: { metricName: 'totalUsers' }, desc: true }],
             limit: 10,
           },
-        ],
+        ].map(withFilter),
       })
       .catch((err) => {
         console.warn('[api/dashboard] demographics unavailable:', err.message || err);
         return null;
       });
 
-    const [[resA], [resB], resC] = await Promise.all([batchA, batchB, batchC]);
+    const [[resA], [resB], resC, [resD]] = await Promise.all([batchA, batchB, batchC, batchD]);
 
     const [kpiNow, kpiPrev, trend, channels, pages] = resA.reports;
     const [sourceMedium, campaigns, events, devices, countries] = resB.reports;
+    const [prevTrend, landingPages, evDaily, evPrevTotal] = resD.reports;
 
     const demoReports = resC && resC[0] ? resC[0].reports : null;
     const demographics = demoReports
@@ -231,15 +306,24 @@ module.exports = async (req, res) => {
       };
     };
 
-    const daily = rowsToObjects(trend, ['date'], [
-      'activeUsers',
-      'sessions',
-      'eventCount',
-      'keyEvents',
-    ]).map((r) => ({
+    const isoDate = (r) => ({
       ...r,
       date: `${r.date.slice(0, 4)}-${r.date.slice(4, 6)}-${r.date.slice(6, 8)}`,
-    }));
+    });
+    const TREND_KEYS = ['activeUsers', 'sessions', 'eventCount', 'keyEvents'];
+    const daily = rowsToObjects(trend, ['date'], TREND_KEYS).map(isoDate);
+    const prevDaily = rowsToObjects(prevTrend, ['date'], TREND_KEYS).map(isoDate);
+
+    let selectedEvent = null;
+    if (keyEvent) {
+      const evRows = rowsToObjects(evDaily, ['date'], ['eventCount']).map(isoDate);
+      selectedEvent = {
+        name: keyEvent,
+        eventCount: evRows.reduce((a, r) => a + r.eventCount, 0),
+        prevEventCount: totalsFrom(evPrevTotal, ['eventCount']).eventCount,
+        daily: evRows,
+      };
+    }
 
     res.status(200).json({
       demo: false,
@@ -247,9 +331,13 @@ module.exports = async (req, res) => {
       propertyName: meta.propertyName,
       range: { startDate, endDate },
       compareRange: { startDate: prevStart, endDate: prevEnd },
+      filters: { device: device || null, channel: channel || null },
       kpis: toKpi(kpiNow),
       prevKpis: toKpi(kpiPrev),
       daily,
+      prevDaily,
+      landingPages: rowsToObjects(landingPages, ['landingPage'], ['sessions', 'totalUsers', 'keyEvents', 'engagementRate']),
+      selectedEvent,
       channels: rowsToObjects(channels, ['channel'], ['sessions', 'activeUsers', 'keyEvents']),
       pages: rowsToObjects(pages, ['pagePath'], ['screenPageViews', 'activeUsers']),
       sourceMedium: rowsToObjects(sourceMedium, ['sourceMedium'], ['totalUsers', 'sessions', 'keyEvents']),
