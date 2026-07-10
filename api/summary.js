@@ -20,35 +20,59 @@ function fmtNum(n) {
   return new Intl.NumberFormat('ko-KR').format(Math.round(n));
 }
 
-// ---------- 룰 베이스 요약 ----------
+// ---------- 고도화된 룰 베이스 요약 ----------
 function ruleBasedSummary(m) {
   const parts = [];
   const days = m.spanDays ? `최근 ${m.spanDays}일간 ` : '';
 
+  // 1. 종합 성과 분석 (사용자 및 전환 결합)
   const userDelta = pctChange(m.kpis.activeUsers, m.prevKpis?.activeUsers);
-  parts.push(
-    `${days}활성 사용자는 ${fmtNum(m.kpis.activeUsers)}명` +
-    (userDelta === null ? '입니다' : `으로 이전 기간 대비 ${fmtPct(userDelta)}했습니다`)
-  );
+  const convDelta = m.kpis.keyEvents != null && m.prevKpis?.keyEvents
+    ? pctChange(m.kpis.keyEvents, m.prevKpis?.keyEvents)
+    : null;
 
+  let performanceTrend = '';
+  if (userDelta > 5 && (convDelta === null || convDelta > 5)) {
+    performanceTrend = '📈 전반적인 웹사이트 성과가 상승 흐름을 보이고 있습니다.';
+  } else if (userDelta < -5 && (convDelta === null || convDelta < -5)) {
+    performanceTrend = '📉 전반적인 주요 지표가 감소하며 둔화 추세를 보이고 있습니다.';
+  } else {
+    performanceTrend = '📊 현재 웹사이트 트래픽은 큰 변동 없이 안정적인 보합세를 유지 중입니다.';
+  }
+  parts.push(performanceTrend);
+
+  // 2. 세부 트래픽 분석 문장 생성
+  let trafficText = `${days}활성 사용자는 **${fmtNum(m.kpis.activeUsers)}명**`;
+  if (userDelta !== null) {
+    trafficText += `으로, 이전 기간 대비 **${fmtPct(userDelta)}**했습니다.`;
+  } else {
+    trafficText += '을 기록했습니다.';
+  }
+
+  // 주 유입 채널 결합
   if (m.topChannel) {
-    parts.push(`유입은 ${m.topChannel} 채널이 가장 많았습니다`);
+    trafficText += ` 이때 유입 기여도가 가장 높은 채널은 **${m.topChannel}**였습니다.`;
   }
+  parts.push(trafficText);
 
+  // 3. 전환(주요 이벤트) 성과 문장 생성
   if (m.kpis.keyEvents != null) {
-    const convDelta = pctChange(m.kpis.keyEvents, m.prevKpis?.keyEvents);
-    parts.push(
-      `전환(주요 이벤트)은 ${fmtNum(m.kpis.keyEvents)}건` +
-      (convDelta === null ? '입니다' : `으로 ${fmtPct(convDelta)}했습니다`)
-    );
+    let convText = `비즈니스 핵심인 주요 이벤트(전환) 건수는 총 **${fmtNum(m.kpis.keyEvents)}건**입니다.`;
+    if (convDelta !== null) {
+      const linkWord = convDelta * (userDelta ?? 0) > 0 ? '흐름을 같이하며' : '흐름과 다르게';
+      convText = `주요 이벤트(전환)는 총 **${fmtNum(m.kpis.keyEvents)}건**으로, 사용자 유입 ${linkWord} 이전 대비 **${fmtPct(convDelta)}**한 상태입니다.`;
+    }
+    parts.push(convText);
   }
 
+  // 4. 리스크 관리 (이상 신호 Alert)
   if (m.anomalies?.length) {
     const a = m.anomalies[0];
-    parts.push(`${a.date}에 ${a.metricLabel || '지표'}가 평소 대비 ${a.direction === 'up' ? '급증' : '급락'}한 이상 신호가 있었습니다`);
+    const directionText = a.direction === 'up' ? '🚨 급증' : '⚠️ 급락';
+    parts.push(`\n[특이사항] ${a.date}에 ${a.metricLabel || '특정 지표'}가 평소 범위를 벗어나 **${directionText}**하는 이상 신호가 감지되어 모니터링이 필요합니다.`);
   }
 
-  return parts.join('. ') + '.';
+  return parts.join('\n');
 }
 
 // ---------- Gemini 요약 ----------
