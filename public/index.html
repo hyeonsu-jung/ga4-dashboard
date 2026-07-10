@@ -111,6 +111,20 @@
   }
   .filter-sel select.active { border-color: var(--primary); color: var(--primary); font-weight: 600; }
 
+  .ai-summary {
+    display: none; background: var(--surface); border: 1px solid var(--line);
+    border-left: 3px solid var(--primary); border-radius: 10px;
+    padding: 12px 16px; margin-bottom: 20px; font-size: 0.9rem;
+    align-items: baseline; gap: 10px;
+  }
+  .ai-summary.show { display: flex; }
+  .ai-summary .tag {
+    flex-shrink: 0; font-family: var(--mono); font-size: 0.65rem; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--primary); background: var(--primary-soft);
+    padding: 2px 8px; border-radius: 999px;
+  }
+  .ai-summary .src { margin-left: auto; flex-shrink: 0; font-family: var(--mono); font-size: 0.65rem; color: var(--muted); }
+
   .anomaly-note {
     display: none; margin-top: 10px; font-size: 0.78rem; color: var(--down);
     font-family: var(--mono);
@@ -370,6 +384,12 @@
     <button class="csv-btn" id="csvBtn">일별 데이터 CSV 내려받기</button>
   </div>
 
+  <div class="ai-summary" id="aiSummary" role="status">
+    <span class="tag">요약</span>
+    <span id="aiSummaryText"></span>
+    <span class="src" id="aiSummarySrc"></span>
+  </div>
+
   <section class="kpi-grid" id="kpiGrid" aria-label="핵심 지표"></section>
 
   <section class="card">
@@ -607,6 +627,7 @@ function render() {
   }).join('');
 
   updateFilterControls();
+  loadSummary();
   renderToggle();
   renderChart();
   renderTables();
@@ -667,6 +688,70 @@ function renderLanding() {
 }
 
 const PALETTE = ['#0c5c4c', '#d98e24', '#3d7ea6', '#c24537', '#6b5b95', '#8aa66b', '#9db3ab'];
+
+// ---- 요약 (Gemini + 룰 베이스 폴백) ----
+function detectAnomalies(daily, key, label) {
+  const vals = daily.map((r) => r[key]);
+  if (vals.length < 7) return [];
+  const mean = vals.reduce((a, v) => a + v, 0) / vals.length;
+  const sd = Math.sqrt(vals.reduce((a, v) => a + (v - mean) ** 2, 0) / vals.length);
+  if (!sd) return [];
+  return vals
+    .map((v, i) => ({ z: (v - mean) / sd, i }))
+    .filter((x) => Math.abs(x.z) > 2)
+    .map((x) => ({ date: daily[x.i].date.slice(5), metricLabel: label, direction: x.z > 0 ? 'up' : 'down' }));
+}
+
+function buildSummaryPayload() {
+  const d = state.data;
+  const spanDays = d.daily.length;
+  return {
+    range: d.range,
+    spanDays,
+    filters: d.filters || null,
+    kpis: {
+      activeUsers: d.kpis.activeUsers,
+      sessions: d.kpis.sessions,
+      keyEvents: d.kpis.keyEvents,
+      engagementRate: d.kpis.engagementRate,
+    },
+    prevKpis: {
+      activeUsers: d.prevKpis.activeUsers,
+      sessions: d.prevKpis.sessions,
+      keyEvents: d.prevKpis.keyEvents,
+      engagementRate: d.prevKpis.engagementRate,
+    },
+    topChannel: d.channels[0]?.channel || null,
+    topSourceMedium: (d.sourceMedium || [])[0]?.sourceMedium || null,
+    topDevice: (d.devices || [])[0]?.device || null,
+    anomalies: [
+      ...detectAnomalies(d.daily, 'activeUsers', '활성 사용자'),
+      ...detectAnomalies(d.daily, 'sessions', '세션'),
+    ].slice(0, 2),
+    selectedEvent: d.selectedEvent ? { name: d.selectedEvent.name, eventCount: d.selectedEvent.eventCount } : null,
+  };
+}
+
+let summaryRequestSeq = 0;
+async function loadSummary() {
+  const box = $('#aiSummary');
+  const seq = ++summaryRequestSeq;
+  try {
+    const r = await fetch('/api/summary', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ metrics: buildSummaryPayload() }),
+    });
+    if (seq !== summaryRequestSeq) return; // 더 새로운 요청이 있으면 무시
+    const data = await r.json();
+    if (!r.ok || !data.summary) throw new Error(data.error || '요약 실패');
+    $('#aiSummaryText').textContent = data.summary;
+    $('#aiSummarySrc').textContent = data.source === 'gemini' ? 'AI (Gemini)' : '자동 생성';
+    box.classList.add('show');
+  } catch (e) {
+    if (seq === summaryRequestSeq) box.classList.remove('show');
+  }
+}
 
 function makeChart(key, canvasId, config) {
   const ctx = $('#' + canvasId);
