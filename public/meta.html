@@ -121,6 +121,13 @@
     background: var(--primary-soft); border-color: var(--primary); color: var(--primary); font-weight: 600;
   }
   .chart-box { position: relative; height: 340px; }
+  .mapping-note {
+    margin-top: 10px; font-size: 0.75rem; color: var(--muted);
+  }
+  .mapping-note code {
+    font-family: var(--mono); font-size: 0.7rem; background: var(--primary-soft);
+    padding: 1px 4px; border-radius: 4px;
+  }
 
   table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
   th {
@@ -263,6 +270,7 @@
       <div class="metric-toggle" id="levelToggle" role="group" aria-label="분석 단위 선택"></div>
     </div>
     <div class="table-scroll" id="perfTable"></div>
+    <p class="mapping-note">※데이터 매핑 기준: Meta Ads API의 <code>campaign_name</code>과 GA4의 <code>sessionCampaignName</code> (<code>utm_campaign</code>) 매칭</p>
   </section>
   </div>
 </main>
