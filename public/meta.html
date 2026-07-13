@@ -228,8 +228,8 @@
       <a href="/meta.html" class="active" aria-current="page">Meta Ads</a>
     </nav>
     <span class="meta">
-      <span>SOURCE <b>Meta Marketing API</b></span>
-      <span>계정 <b id="metaAccountName">–</b></span>
+      <span>GA4 <b id="metaGa4Property">–</b></span>
+      <span>META <b id="metaAccountName">–</b></span>
       <span>기간 <b id="metaRange">–</b></span>
       <span>비교 <b id="metaCompare">–</b></span>
       <span>갱신 <b id="metaUpdated">–</b></span>
@@ -606,7 +606,20 @@ async function loadSummary() {
   }
 }
 
-// ---- Meta 로그인 · 광고계정 선택 (검색 모달) ----
+// ---- 헤더 표시 (GA4 속성 · Meta 계정) ----
+function updateGa4Header(me) {
+  const el = $('#metaGa4Property');
+  if (me?.propertyId) {
+    el.textContent = me.propertyName ? `${me.propertyName} (${me.propertyId})` : me.propertyId;
+  } else if (me?.loggedIn) {
+    el.textContent = '속성 미선택';
+  } else if (me?.oauthConfigured) {
+    el.textContent = '미연결';
+  } else {
+    el.textContent = 'DEMO';
+  }
+}
+
 function updateAccountHeader() {
   $('#metaAccountName').textContent = state.configured
     ? (state.account ? `${state.account.name} (${state.account.accountId})` : '미선택')
@@ -729,14 +742,19 @@ $('#applyCustom').addEventListener('click', () => {
   $('#customStart').value = init.startDate;
   $('#customEnd').value = init.endDate;
 
-  // 인증 상태 + 접근 가능한 광고계정 목록 조회
+  // 인증 상태 + 접근 가능한 광고계정 목록 + GA4 인증 상태 병렬 조회
   let info = { configured: false, loginAvailable: false, loggedIn: false, accounts: [] };
-  try {
-    const r = await fetch('/api/meta-accounts');
-    const data = await r.json();
-    if (r.ok) info = data;
-    else if (data.error) $('#kpiGrid').innerHTML = `<div class="state error">${escapeHtml(data.detail || data.error)}</div>`;
-  } catch { /* 아래에서 데모 모드 처리 */ }
+  const [accountsRes, meRes] = await Promise.allSettled([
+    fetch('/api/meta-accounts').then((r) => r.json().then((d) => ({ ok: r.ok, d }))),
+    fetch('/api/auth/me').then((r) => r.json()),
+  ]);
+  if (accountsRes.status === 'fulfilled') {
+    if (accountsRes.value.ok) info = accountsRes.value.d;
+    else if (accountsRes.value.d?.error) $('#kpiGrid').innerHTML = `<div class="state error">${escapeHtml(accountsRes.value.d.detail || accountsRes.value.d.error)}</div>`;
+  }
+
+  // 헤더에 현재 GA4 속성 표시 (GA4 페이지에서 로그인·선택한 속성을 세션으로 공유)
+  updateGa4Header(meRes.status === 'fulfilled' ? meRes.value : null);
 
   state.configured = Boolean(info.configured);
   state.allAccounts = info.accounts || [];

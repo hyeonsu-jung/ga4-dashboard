@@ -322,7 +322,8 @@
       <a href="/meta.html">Meta Ads</a>
     </nav>
     <span class="meta">
-      <span>PROPERTY <b id="metaProperty">–</b></span>
+      <span>GA4 <b id="metaProperty">–</b></span>
+      <span>META <b id="metaAdAccount">–</b></span>
       <span>기간 <b id="metaRange">–</b></span>
       <span>비교 <b id="metaCompare">–</b></span>
       <span>갱신 <b id="metaUpdated">–</b></span>
@@ -1176,7 +1177,23 @@ async function fetchAuth() {
   const r = await fetch('/api/auth/me');
   state.auth = await r.json();
   updateAuthBar(state.auth);
+  updateMetaHeader(state.auth);
   return state.auth;
+}
+
+// 헤더에 현재 Meta 광고계정 정보 표시 (Meta 페이지에서 선택한 계정을 localStorage로 공유)
+function updateMetaHeader(auth) {
+  const el = document.getElementById('metaAdAccount');
+  if (!el) return;
+  let acct = null;
+  try { acct = JSON.parse(localStorage.getItem('meta_ad_account') || 'null'); } catch { /* 무시 */ }
+  if (auth?.metaLoggedIn && acct) {
+    el.textContent = `${acct.name} (${acct.accountId})`;
+  } else if (auth?.metaLoggedIn) {
+    el.textContent = '계정 미선택';
+  } else {
+    el.textContent = '미연결';
+  }
 }
 
 function escapeHtml(s) {
