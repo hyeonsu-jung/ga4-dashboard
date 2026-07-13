@@ -75,11 +75,59 @@ function ruleBasedSummary(m) {
   return parts.join('\n');
 }
 
+// ---------- Meta Ads 룰 베이스 요약 ----------
+function fmtKrw(n) {
+  return `${fmtNum(n)}원`;
+}
+
+function ruleBasedMetaSummary(m) {
+  const parts = [];
+  const days = m.spanDays ? `최근 ${m.spanDays}일간 ` : '';
+
+  const spendDelta = pctChange(m.kpis.spend, m.prevKpis?.spend);
+  const convDelta = m.kpis.ga4KeyEvents != null && m.prevKpis?.ga4KeyEvents
+    ? pctChange(m.kpis.ga4KeyEvents, m.prevKpis.ga4KeyEvents)
+    : null;
+
+  // 1. 집행 효율 종합 판정
+  let verdict = '📊 광고 집행 규모와 성과가 큰 변동 없이 유지되고 있습니다.';
+  if (spendDelta !== null && convDelta !== null) {
+    if (convDelta > 5 && convDelta >= spendDelta) verdict = '📈 광고비 대비 전환이 효율적으로 증가하며 집행 효율이 개선되고 있습니다.';
+    else if (spendDelta > 5 && convDelta < 0) verdict = '⚠️ 광고비는 늘었지만 전환은 감소해 집행 효율 점검이 필요합니다.';
+    else if (spendDelta < -5 && convDelta > 0) verdict = '📈 광고비를 줄였음에도 전환이 유지·증가해 효율이 좋아졌습니다.';
+    else if (spendDelta < -5 && convDelta < -5) verdict = '📉 광고비 축소와 함께 전환도 감소한 추세입니다.';
+  }
+  parts.push(verdict);
+
+  // 2. 집행 규모
+  let spendText = `${days}메타 광고비는 총 **${fmtKrw(m.kpis.spend)}**`;
+  spendText += spendDelta === null ? '이 집행되었습니다.' : `으로, 이전 기간 대비 **${fmtPct(spendDelta)}**했습니다.`;
+  if (m.kpis.cpc) spendText += ` 평균 CPC는 **${fmtKrw(m.kpis.cpc)}**입니다.`;
+  parts.push(spendText);
+
+  // 3. 전환 성과 (GA4 매핑)
+  if (m.kpis.ga4KeyEvents != null) {
+    let convText = `GA4 매핑 기준 전환은 총 **${fmtNum(m.kpis.ga4KeyEvents)}건**`;
+    convText += convDelta === null ? '입니다.' : `으로 이전 대비 **${fmtPct(convDelta)}**했습니다.`;
+    if (m.kpis.cac) convText += ` 전환당 비용(CAC)은 **${fmtKrw(m.kpis.cac)}**입니다.`;
+    if (m.kpis.roas) convText += ` ROAS는 **${(m.kpis.roas * 100).toFixed(0)}%**입니다.`;
+    parts.push(convText);
+  }
+
+  // 4. 최고 지출 캠페인
+  if (m.topCampaign) {
+    parts.push(`지출 비중이 가장 큰 캠페인은 **${m.topCampaign}**입니다.`);
+  }
+
+  return parts.join('\n');
+}
+
 // ---------- Gemini 요약 ----------
 async function geminiSummary(metrics, apiKey) {
+  const domain = metrics.type === 'meta' ? 'Meta 광고 성과' : 'GA4 웹 분석';
   const prompt = [
-    '당신은 웹 분석 대시보드의 요약 도우미입니다.',
-    '아래 GA4 지표 JSON을 보고, 마케터가 한눈에 파악할 수 있는 한국어 요약을 정확히 1~2문장으로 작성하세요.',
+    `당신은 ${domain} 대시보드의 요약 도우미입니다.`,
+    `아래 ${domain} 지표 JSON을 보고, 마케터가 한눈에 파악할 수 있는 한국어 요약을 정확히 1~2문장으로 작성하세요.`,
     '수치는 JSON에 있는 값만 사용하고, 추측이나 조언은 하지 마세요. 존댓말(-습니다)로 끝내세요.',
     '',
     JSON.stringify(metrics),
@@ -140,8 +188,10 @@ module.exports = async (req, res) => {
   } catch {
     return res.status(400).json({ error: '잘못된 JSON 본문입니다.' });
   }
-  if (!metrics?.kpis || typeof metrics.kpis.activeUsers !== 'number') {
-    return res.status(400).json({ error: 'metrics.kpis가 필요합니다.' });
+  const isMeta = metrics?.type === 'meta';
+  const requiredKey = isMeta ? 'spend' : 'activeUsers';
+  if (!metrics?.kpis || typeof metrics.kpis[requiredKey] !== 'number') {
+    return res.status(400).json({ error: `metrics.kpis.${requiredKey}가 필요합니다.` });
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
@@ -156,5 +206,6 @@ module.exports = async (req, res) => {
     }
   }
 
-  return res.status(200).json({ summary: ruleBasedSummary(metrics), source: 'rule' });
+  const summary = isMeta ? ruleBasedMetaSummary(metrics) : ruleBasedSummary(metrics);
+  return res.status(200).json({ summary, source: 'rule' });
 };

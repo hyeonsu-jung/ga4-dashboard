@@ -7,6 +7,8 @@
     { "source": "/", "destination": "/index.html", "statusCode": 307 }
   ],
   "rewrites": [
+    { "source": "/meta", "destination": "/meta.html" },
+    { "source": "/ga4", "destination": "/index.html" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

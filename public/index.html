@@ -52,6 +52,15 @@
   .report-strip .doc-title {
     font-size: 1.05rem; font-weight: 700; letter-spacing: -0.01em;
   }
+  .gnb { display: flex; gap: 4px; margin-left: 12px; }
+  .gnb a {
+    font-size: 0.8rem; text-decoration: none; color: #9db3ab;
+    padding: 5px 12px; border-radius: 999px; border: 1px solid transparent;
+  }
+  .gnb a:hover { color: #eef4f1; }
+  .gnb a.active {
+    color: #eef4f1; background: #243530; border-color: #3d524c; font-weight: 600;
+  }
   .report-strip .meta {
     font-family: var(--mono); font-size: 0.72rem; color: #9db3ab;
     display: flex; flex-wrap: wrap; gap: 4px 24px;
@@ -308,6 +317,10 @@
 <header class="report-strip">
   <div class="inner">
     <span class="doc-title">웹 분석 대시보드</span>
+    <nav class="gnb" aria-label="대시보드 전환">
+      <a href="/index.html" class="active" aria-current="page">GA4 분석</a>
+      <a href="/meta.html">Meta Ads</a>
+    </nav>
     <span class="meta">
       <span>PROPERTY <b id="metaProperty">–</b></span>
       <span>기간 <b id="metaRange">–</b></span>
@@ -553,7 +566,17 @@ function rangeFromPreset(preset) {
   return { startDate: ymd(s), endDate: end };
 }
 
+function initialRange() {
+  // Meta Ads 페이지와 조회 기간 공유
+  try {
+    const stored = JSON.parse(localStorage.getItem('dash_range') || 'null');
+    if (stored?.startDate && stored?.endDate && stored.startDate <= stored.endDate) return stored;
+  } catch { /* 무시 */ }
+  return rangeFromPreset('7');
+}
+
 async function load(startDate, endDate) {
+  try { localStorage.setItem('dash_range', JSON.stringify({ startDate, endDate })); } catch { /* 무시 */ }
   $('#kpiGrid').innerHTML = '<div class="state">데이터를 불러오는 중…</div>';
   try {
     const params = new URLSearchParams({ startDate, endDate });
@@ -1253,7 +1276,7 @@ async function selectProperty(propertyId, propertyName) {
   await fetchAuth();
   closePropertyPicker();
   showDashboard();
-  const init = rangeFromPreset('7');
+  const init = initialRange();
   $('#customStart').value = init.startDate;
   $('#customEnd').value = init.endDate;
   load(init.startDate, init.endDate);
@@ -1286,7 +1309,7 @@ async function bootstrap() {
 
   if (!auth.oauthConfigured) {
     showDashboard();
-    const init = rangeFromPreset('7');
+    const init = initialRange();
     $('#customStart').value = init.startDate;
     $('#customEnd').value = init.endDate;
     load(init.startDate, init.endDate);
@@ -1307,7 +1330,7 @@ async function bootstrap() {
   }
 
   showDashboard();
-  const init = rangeFromPreset('7');
+  const init = initialRange();
   $('#customStart').value = init.startDate;
   $('#customEnd').value = init.endDate;
   load(init.startDate, init.endDate);

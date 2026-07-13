@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Meta Ads 성과 분석 · 웹 분석 대시보드</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/ibm-plex/6.4.0/css/ibm-plex-mono.min.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --paper: #f3f6f4;
+    --surface: #ffffff;
+    --ink: #14201c;
+    --muted: #5e6b66;
+    --line: #e0e7e3;
+    --primary: #0c5c4c;
+    --primary-soft: #e2f0ea;
+    --meta-blue: #1877f2;
+    --amber: #d98e24;
+    --up: #0c7a4b;
+    --down: #c24537;
+    --mono: 'IBM Plex Mono', ui-monospace, monospace;
+    --sans: 'Pretendard Variable', Pretendard, -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html { font-size: 15px; }
+  body {
+    font-family: var(--sans); background: var(--paper); color: var(--ink);
+    -webkit-font-smoothing: antialiased; line-height: 1.5;
+  }
+  a { color: var(--primary); }
+  button { font-family: var(--sans); cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 24px 72px; }
+
+  .report-strip { background: var(--ink); color: #eef4f1; margin: 0 0 28px; position: relative; z-index: 101; }
+  .report-strip .inner {
+    max-width: 1160px; margin: 0 auto; padding: 18px 24px;
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 28px;
+  }
+  .report-strip .doc-title { font-size: 1.05rem; font-weight: 700; letter-spacing: -0.01em; }
+  .gnb { display: flex; gap: 4px; margin-left: 12px; }
+  .gnb a {
+    font-size: 0.8rem; text-decoration: none; color: #9db3ab;
+    padding: 5px 12px; border-radius: 999px; border: 1px solid transparent;
+  }
+  .gnb a:hover { color: #eef4f1; }
+  .gnb a.active { color: #eef4f1; background: #243530; border-color: #3d524c; font-weight: 600; }
+  .report-strip .meta {
+    font-family: var(--mono); font-size: 0.72rem; color: #9db3ab;
+    display: flex; flex-wrap: wrap; gap: 4px 24px;
+  }
+  .report-strip .meta b { color: #eef4f1; font-weight: 500; }
+
+  .demo-banner {
+    display: none; background: #fdf3e2; border: 1px solid #eed7ac; color: #7a5410;
+    padding: 10px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 0.85rem;
+  }
+  .demo-banner.show { display: block; }
+
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 24px; }
+  .preset {
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+    padding: 7px 14px; border-radius: 999px; font-size: 0.85rem;
+  }
+  .preset[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+  .custom-range { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--muted); }
+  .custom-range input {
+    font-family: var(--mono); font-size: 0.8rem; padding: 6px 8px;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink);
+  }
+  .apply-btn {
+    background: var(--primary); color: #fff; border: none; border-radius: 8px;
+    padding: 7px 16px; font-size: 0.85rem; font-weight: 600;
+  }
+
+  .ai-summary {
+    display: none; background: var(--surface); border: 1px solid var(--line);
+    border-left: 3px solid var(--meta-blue); border-radius: 10px;
+    padding: 12px 16px; margin-bottom: 20px; font-size: 0.9rem;
+    align-items: flex-start; gap: 10px;
+  }
+  .ai-summary.show { display: flex; }
+  .ai-summary .tag {
+    flex-shrink: 0; font-family: var(--mono); font-size: 0.65rem; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--meta-blue); background: #e7f0fe;
+    padding: 2px 8px; border-radius: 999px;
+  }
+  .ai-summary #aiSummaryText { white-space: pre-line; line-height: 1.65; }
+  .ai-summary #aiSummaryText strong { color: var(--meta-blue); font-weight: 700; }
+  .ai-summary .src { margin-left: auto; flex-shrink: 0; font-family: var(--mono); font-size: 0.65rem; color: var(--muted); }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; margin-bottom: 28px; }
+  .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px 12px; }
+  .kpi .label { font-size: 0.78rem; color: var(--muted); letter-spacing: 0.02em; margin-bottom: 6px; }
+  .kpi .value {
+    font-family: var(--mono); font-size: 1.7rem; font-weight: 600;
+    font-variant-numeric: tabular-nums; letter-spacing: -0.03em; line-height: 1.15;
+  }
+  .kpi .value .unit { font-size: 0.85rem; color: var(--muted); font-weight: 400; margin-left: 2px; }
+  .kpi .delta { font-family: var(--mono); font-size: 0.75rem; margin-top: 4px; display: inline-block; }
+  .kpi .delta.up { color: var(--up); }
+  .kpi .delta.down { color: var(--down); }
+  .kpi .delta.flat { color: var(--muted); }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px 22px; margin-bottom: 22px; }
+  .card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .card-head h2 { font-size: 1rem; font-weight: 700; letter-spacing: -0.01em; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 0.68rem; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .metric-toggle { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+  .metric-toggle button {
+    border: 1px solid var(--line); background: none; color: var(--muted);
+    padding: 4px 10px; border-radius: 6px; font-size: 0.75rem;
+  }
+  .metric-toggle button[aria-pressed="true"] {
+    background: var(--primary-soft); border-color: var(--primary); color: var(--primary); font-weight: 600;
+  }
+  .chart-box { position: relative; height: 340px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th {
+    text-align: left; font-family: var(--mono); font-size: 0.68rem; font-weight: 500;
+    color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap;
+  }
+  th.num, td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  td { padding: 8px; border-bottom: 1px solid var(--line); }
+  tr:last-child td { border-bottom: none; }
+  td .path { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; }
+  .share-bar { height: 4px; border-radius: 2px; background: var(--primary-soft); margin-top: 4px; overflow: hidden; }
+  .share-bar i { display: block; height: 100%; background: var(--meta-blue); }
+  .table-scroll { overflow-x: auto; }
+
+  .state { text-align: center; color: var(--muted); padding: 48px 0; font-size: 0.9rem; }
+  .state.error { color: var(--down); }
+  .ga4-note {
+    display: none; background: #fdf3e2; border: 1px solid #eed7ac; color: #7a5410;
+    padding: 8px 14px; border-radius: 8px; margin-bottom: 14px; font-size: 0.8rem;
+  }
+  .ga4-note.show { display: block; }
+</style>
+</head>
+<body>
+
+<header class="report-strip">
+  <div class="inner">
+    <span class="doc-title">웹 분석 대시보드</span>
+    <nav class="gnb" aria-label="대시보드 전환">
+      <a href="/index.html">GA4 분석</a>
+      <a href="/meta.html" class="active" aria-current="page">Meta Ads</a>
+    </nav>
+    <span class="meta">
+      <span>SOURCE <b>Meta Marketing API</b></span>
+      <span>기간 <b id="metaRange">–</b></span>
+      <span>비교 <b id="metaCompare">–</b></span>
+      <span>갱신 <b id="metaUpdated">–</b></span>
+    </span>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="demo-banner" id="demoBanner">
+    데모 데이터로 표시 중입니다. <code>META_ACCESS_TOKEN</code>, <code>META_AD_ACCOUNT_ID</code> 환경변수를 설정하면 실제 Meta 광고 계정 데이터를 조회합니다.
+  </div>
+
+  <div class="controls" role="group" aria-label="조회 기간 선택">
+    <button class="preset" data-days="1">오늘</button>
+    <button class="preset" data-days="7" aria-pressed="true">최근 7일</button>
+    <button class="preset" data-days="30">최근 30일</button>
+    <button class="preset" data-days="month">이번 달</button>
+    <span class="custom-range">
+      <input type="date" id="customStart" aria-label="시작일" />
+      ~
+      <input type="date" id="customEnd" aria-label="종료일" />
+      <button class="apply-btn" id="applyCustom">적용</button>
+    </span>
+  </div>
+
+  <div class="ai-summary" id="aiSummary" role="status">
+    <span class="tag">요약</span>
+    <span id="aiSummaryText"></span>
+    <span class="src" id="aiSummarySrc"></span>
+  </div>
+
+  <div class="ga4-note" id="ga4Note">
+    GA4 계정이 연결되지 않아 세션·전환·ROAS 컬럼이 표시되지 않습니다. GA4 분석 페이지에서 로그인·속성 선택 후 다시 조회해 주세요.
+  </div>
+
+  <section class="kpi-grid" id="kpiGrid" aria-label="Meta 광고 핵심 지표"></section>
+
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <div class="eyebrow">Spend vs Conversion</div>
+        <h2>일별 광고비 · 전환 추이</h2>
+      </div>
+    </div>
+    <div class="chart-box"><canvas id="spendChart"></canvas></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <div class="eyebrow">Campaign Performance</div>
+        <h2>메타 광고 성과 상세</h2>
+      </div>
+      <div class="metric-toggle" id="levelToggle" role="group" aria-label="분석 단위 선택"></div>
+    </div>
+    <div class="table-scroll" id="perfTable"></div>
+  </section>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const fmt = new Intl.NumberFormat('ko-KR');
+const state = { data: null, level: 'campaign', chart: null };
+
+function ymd(d) { return d.toISOString().slice(0, 10); }
+function todayKST() { return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10); }
+
+function rangeFromPreset(preset) {
+  const end = todayKST();
+  if (preset === 'month') return { startDate: end.slice(0, 8) + '01', endDate: end };
+  const days = Number(preset);
+  const s = new Date(end + 'T00:00:00Z');
+  s.setUTCDate(s.getUTCDate() - (days - 1));
+  return { startDate: ymd(s), endDate: end };
+}
+
+function initialRange() {
+  // GA4 페이지와 조회 기간 공유
+  try {
+    const stored = JSON.parse(localStorage.getItem('dash_range') || 'null');
+    if (stored?.startDate && stored?.endDate && stored.startDate <= stored.endDate) return stored;
+  } catch { /* 무시 */ }
+  return rangeFromPreset('7');
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function krw(v) { return fmt.format(Math.round(v)); }
+function dash(v, formatter) { return v == null ? '–' : formatter(v); }
+
+function deltaHtml(now, prev, invert = false) {
+  if (prev == null || !prev) return '<span class="delta flat">이전 기간 데이터 없음</span>';
+  const pct = ((now - prev) / prev) * 100;
+  let cls = pct > 0.05 ? 'up' : pct < -0.05 ? 'down' : 'flat';
+  if (invert && cls !== 'flat') cls = cls === 'up' ? 'down' : 'up'; // 비용 지표는 감소가 긍정
+  const arrow = pct > 0.05 ? '▲' : pct < -0.05 ? '▼' : '–';
+  return `<span class="delta ${cls}">${arrow} ${Math.abs(pct).toFixed(1)}% <span style="color:var(--muted)">vs 이전 기간</span></span>`;
+}
+
+async function load(startDate, endDate) {
+  try { localStorage.setItem('dash_range', JSON.stringify({ startDate, endDate })); } catch { /* 무시 */ }
+  $('#kpiGrid').innerHTML = '<div class="state">데이터를 불러오는 중…</div>';
+  try {
+    const params = new URLSearchParams({ startDate, endDate, level: state.level });
+    const r = await fetch(`/api/meta-dashboard?${params}`);
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || data.error || '조회 실패');
+    state.data = data;
+    render();
+  } catch (e) {
+    $('#kpiGrid').innerHTML = `<div class="state error">Meta 광고 데이터를 불러오지 못했습니다. ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function reload() {
+  const s = $('#customStart').value, e = $('#customEnd').value;
+  if (s && e) load(s, e);
+}
+
+function render() {
+  const d = state.data;
+  $('#demoBanner').classList.toggle('show', !!d.demo);
+  $('#ga4Note').classList.toggle('show', !d.ga4Linked);
+  $('#metaRange').textContent = `${d.range.startDate} ~ ${d.range.endDate}`;
+  $('#metaCompare').textContent = `${d.compareRange.startDate} ~ ${d.compareRange.endDate}`;
+  $('#metaUpdated').textContent = new Date().toLocaleString('ko-KR', { hour12: false });
+
+  renderKpis();
+  renderChart();
+  renderLevelToggle();
+  renderTable();
+  loadSummary();
+}
+
+function renderKpis() {
+  const d = state.data;
+  const k = d.kpis, p = d.prevKpis;
+  const cards = [
+    { label: '총 광고비', value: `${krw(k.spend)}<span class="unit">원</span>`, delta: deltaHtml(k.spend, p.spend) },
+    { label: '총 노출수', value: fmt.format(k.impressions), delta: deltaHtml(k.impressions, p.impressions) },
+    { label: '총 클릭수', value: fmt.format(k.clicks), delta: deltaHtml(k.clicks, p.clicks) },
+    { label: '평균 CPC', value: `${krw(k.cpc)}<span class="unit">원</span>`, delta: deltaHtml(k.cpc, p.cpc, true) },
+    { label: '평균 CPM', value: `${krw(k.cpm)}<span class="unit">원</span>`, delta: deltaHtml(k.cpm, p.cpm, true) },
+    {
+      label: 'GA4 전환수 (매핑)',
+      value: k.ga4KeyEvents == null ? '–' : fmt.format(k.ga4KeyEvents),
+      delta: k.ga4KeyEvents == null ? '<span class="delta flat">GA4 미연결</span>' : deltaHtml(k.ga4KeyEvents, p.ga4KeyEvents),
+    },
+    {
+      label: k.roas != null ? '통합 ROAS' : '전환당 비용 (CAC)',
+      value: k.roas != null
+        ? `${(k.roas * 100).toFixed(0)}<span class="unit">%</span>`
+        : (k.cac == null ? '–' : `${krw(k.cac)}<span class="unit">원</span>`),
+      delta: k.roas != null || k.cac != null
+        ? '<span class="delta flat">GA4 캠페인 매핑 기준</span>'
+        : '<span class="delta flat">GA4 미연결</span>',
+    },
+  ];
+  $('#kpiGrid').innerHTML = cards.map((c) => `<article class="kpi">
+    <div class="label">${c.label}</div>
+    <div class="value">${c.value}</div>
+    ${c.delta}
+  </article>`).join('');
+}
+
+function renderChart() {
+  const d = state.data;
+  const ctx = $('#spendChart');
+  if (typeof Chart === 'undefined') {
+    ctx.parentElement.innerHTML = '<div class="state error">차트 라이브러리를 불러오지 못했습니다.</div>';
+    return;
+  }
+  const hasGa4 = d.ga4Linked && d.daily.some((r) => r.ga4KeyEvents != null);
+  const rightLabel = hasGa4 ? 'GA4 전환수' : '클릭수';
+  const rightData = d.daily.map((r) => (hasGa4 ? r.ga4KeyEvents : r.clicks));
+
+  if (state.chart) state.chart.destroy();
+  state.chart = new Chart(ctx, {
+    data: {
+      labels: d.daily.map((r) => r.date.slice(5)),
+      datasets: [
+        {
+          type: 'bar',
+          label: '광고비 (원)',
+          data: d.daily.map((r) => r.spend),
+          backgroundColor: 'rgba(24,119,242,0.55)',
+          borderRadius: 3,
+          yAxisID: 'ySpend',
+          order: 2,
+        },
+        {
+          type: 'line',
+          label: rightLabel,
+          data: rightData,
+          borderColor: '#0c5c4c',
+          backgroundColor: '#0c5c4c',
+          tension: 0.25,
+          pointRadius: d.daily.length > 45 ? 0 : 2.5,
+          borderWidth: 2,
+          yAxisID: 'yConv',
+          order: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, labels: { boxWidth: 18, font: { size: 11 } } },
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${fmt.format(c.parsed.y)}` } },
+      },
+      scales: {
+        ySpend: {
+          position: 'left', beginAtZero: true,
+          ticks: { callback: (v) => fmt.format(v), font: { family: 'IBM Plex Mono', size: 10 } },
+          grid: { color: '#eef2f0' },
+          title: { display: true, text: '광고비 (원)', font: { size: 10 } },
+        },
+        yConv: {
+          position: 'right', beginAtZero: true,
+          ticks: { callback: (v) => fmt.format(v), font: { family: 'IBM Plex Mono', size: 10 } },
+          grid: { drawOnChartArea: false },
+          title: { display: true, text: rightLabel, font: { size: 10 } },
+        },
+        x: { ticks: { maxTicksLimit: 14, font: { family: 'IBM Plex Mono', size: 10 } }, grid: { display: false } },
+      },
+    },
+  });
+}
+
+const LEVELS = [
+  { key: 'campaign', label: '캠페인' },
+  { key: 'adset', label: '광고 세트' },
+  { key: 'ad', label: '광고 소재' },
+];
+
+function renderLevelToggle() {
+  $('#levelToggle').innerHTML = LEVELS.map((l) =>
+    `<button aria-pressed="${state.level === l.key}" data-level="${l.key}">${l.label}</button>`).join('');
+  $('#levelToggle').querySelectorAll('button').forEach((b) =>
+    b.addEventListener('click', () => {
+      if (state.level === b.dataset.level) return;
+      state.level = b.dataset.level;
+      reload();
+    }));
+}
+
+function renderTable() {
+  const d = state.data;
+  const rows = d.rows || [];
+  if (!rows.length) {
+    $('#perfTable').innerHTML = '<div class="state">해당 기간에 집행된 광고가 없습니다.</div>';
+    return;
+  }
+  const totalSpend = rows.reduce((a, r) => a + r.spend, 0) || 1;
+  const showAdset = state.level !== 'campaign';
+  const showAd = state.level === 'ad';
+  const ga4Cols = state.level === 'campaign';
+
+  $('#perfTable').innerHTML = `<table>
+    <thead><tr>
+      <th>캠페인명</th>
+      ${showAdset ? '<th>광고 세트</th>' : ''}
+      ${showAd ? '<th>광고 소재</th>' : ''}
+      <th class="num">광고비 (원)</th>
+      <th class="num">노출수</th>
+      <th class="num">클릭수</th>
+      <th class="num">CPC</th>
+      <th class="num">CTR</th>
+      ${ga4Cols ? '<th class="num">GA4 세션</th><th class="num">GA4 전환</th><th class="num">CAC / ROAS</th>' : ''}
+    </tr></thead>
+    <tbody>${rows.map((r) => `<tr>
+      <td><span class="path" title="${escapeHtml(r.campaign)}">${escapeHtml(r.campaign)}</span>
+        <div class="share-bar"><i style="width:${(r.spend / totalSpend * 100).toFixed(1)}%"></i></div></td>
+      ${showAdset ? `<td><span class="path" title="${escapeHtml(r.adset || '')}">${escapeHtml(r.adset || '–')}</span></td>` : ''}
+      ${showAd ? `<td><span class="path" title="${escapeHtml(r.ad || '')}">${escapeHtml(r.ad || '–')}</span></td>` : ''}
+      <td class="num">${krw(r.spend)}</td>
+      <td class="num">${fmt.format(r.impressions)}</td>
+      <td class="num">${fmt.format(r.clicks)}</td>
+      <td class="num">${dash(r.cpc, (v) => krw(v))}</td>
+      <td class="num">${dash(r.ctr, (v) => (v * 100).toFixed(2) + '%')}</td>
+      ${ga4Cols ? `
+        <td class="num">${dash(r.ga4Sessions, fmt.format.bind(fmt))}</td>
+        <td class="num">${dash(r.ga4KeyEvents, fmt.format.bind(fmt))}</td>
+        <td class="num">${r.roas != null ? (r.roas * 100).toFixed(0) + '%' : dash(r.cac, (v) => krw(v) + '원')}</td>
+      ` : ''}
+    </tr>`).join('')}</tbody></table>`;
+}
+
+// ---- AI 요약 ----
+let summaryRequestSeq = 0;
+async function loadSummary() {
+  const d = state.data;
+  const box = $('#aiSummary');
+  const seq = ++summaryRequestSeq;
+  const topRow = (d.rows || [])[0];
+  const payload = {
+    type: 'meta',
+    range: d.range,
+    spanDays: d.daily.length,
+    kpis: d.kpis,
+    prevKpis: d.prevKpis,
+    topCampaign: topRow ? topRow.campaign : null,
+    ga4Linked: d.ga4Linked,
+  };
+  try {
+    const r = await fetch('/api/summary', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ metrics: payload }),
+    });
+    if (seq !== summaryRequestSeq) return;
+    const data = await r.json();
+    if (!r.ok || !data.summary) throw new Error(data.error || '요약 실패');
+    $('#aiSummaryText').innerHTML = escapeHtml(data.summary)
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    $('#aiSummarySrc').textContent = data.source === 'gemini' ? 'AI (Gemini)' : '자동 생성';
+    box.classList.add('show');
+  } catch (e) {
+    if (seq === summaryRequestSeq) box.classList.remove('show');
+  }
+}
+
+// ---- 컨트롤 ----
+document.querySelectorAll('.preset').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.preset').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+    btn.setAttribute('aria-pressed', 'true');
+    const { startDate, endDate } = rangeFromPreset(btn.dataset.days);
+    $('#customStart').value = startDate;
+    $('#customEnd').value = endDate;
+    load(startDate, endDate);
+  });
+});
+
+$('#applyCustom').addEventListener('click', () => {
+  const s = $('#customStart').value, e = $('#customEnd').value;
+  if (!s || !e) return alert('시작일과 종료일을 모두 선택해 주세요.');
+  if (s > e) return alert('시작일이 종료일보다 늦을 수 없습니다.');
+  document.querySelectorAll('.preset').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+  load(s, e);
+});
+
+// 초기 로드
+(function bootstrap() {
+  const init = initialRange();
+  $('#customStart').value = init.startDate;
+  $('#customEnd').value = init.endDate;
+  load(init.startDate, init.endDate);
+})();
+</script>
+</body>
+</html>
