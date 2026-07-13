@@ -139,44 +139,37 @@
   .state { text-align: center; color: var(--muted); padding: 48px 0; font-size: 0.9rem; }
   .state.error { color: var(--down); }
 
-  .header-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .header-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .auth-user { font-family: var(--mono); font-size: 0.78rem; color: #9db3ab; }
   .account-btn {
     border: 1px solid #3d524c; background: transparent; color: #eef4f1;
-    padding: 6px 12px; border-radius: 8px; font-size: 0.78rem;
+    padding: 6px 12px; border-radius: 8px; font-size: 0.78rem; text-decoration: none;
   }
   .account-btn:hover { background: #243530; }
+  .acct-sel {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 0.78rem; color: #9db3ab;
+  }
+  .acct-sel select {
+    font-family: var(--sans); font-size: 0.8rem; max-width: 260px;
+    padding: 6px 8px; border: 1px solid #3d524c; border-radius: 8px;
+    background: #243530; color: #eef4f1;
+  }
 
-  .overlay {
-    display: none; position: fixed; inset: 0; background: rgba(20,32,28,.45);
-    align-items: center; justify-content: center; z-index: 100; padding: 24px;
+  .gate {
+    max-width: 480px; margin: 80px auto; text-align: center;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 40px 32px;
   }
-  .overlay.show { display: flex; }
-  .modal {
-    width: min(520px, 100%); max-height: 80vh; overflow: auto;
-    background: var(--surface); border-radius: 14px; padding: 24px;
-    box-shadow: 0 16px 48px rgba(0,0,0,.18);
+  .gate h1 { font-size: 1.35rem; margin-bottom: 10px; letter-spacing: -0.02em; }
+  .gate p { color: var(--muted); font-size: 0.92rem; margin-bottom: 24px; }
+  .meta-login-btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: var(--meta-blue); color: #fff; border: none; border-radius: 10px;
+    padding: 12px 20px; font-size: 0.95rem; font-weight: 600; text-decoration: none;
+    box-shadow: 0 1px 3px rgba(0,0,0,.12);
   }
-  .modal h2 { font-size: 1.1rem; margin-bottom: 6px; }
-  .modal .hint { color: var(--muted); font-size: 0.85rem; margin-bottom: 14px; }
-  .acct-search-wrap { margin-bottom: 12px; }
-  .acct-search-wrap input {
-    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
-    font-size: 0.9rem; font-family: var(--sans); background: var(--surface); color: var(--ink);
-  }
-  .acct-list-wrap { max-height: 50vh; overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
-  .acct-list { list-style: none; padding: 0; }
-  .acct-list li + li { margin-top: 8px; }
-  .acct-list button {
-    width: 100%; text-align: left; border: 1px solid var(--line); background: var(--surface);
-    border-radius: 10px; padding: 12px 14px;
-  }
-  .acct-list button:hover { border-color: var(--meta-blue); background: #e7f0fe; }
-  .acct-list .name { font-weight: 600; display: block; }
-  .acct-list .sub { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
-  .modal-actions { margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px; }
-  .modal-actions button {
-    border: 1px solid var(--line); background: none; border-radius: 8px; padding: 8px 14px; font-size: 0.85rem;
-  }
+  .meta-login-btn:hover { background: #1465cc; }
+  .meta-login-btn svg { width: 18px; height: 18px; fill: #fff; }
   .ga4-note {
     display: none; background: #fdf3e2; border: 1px solid #eed7ac; color: #7a5410;
     padding: 8px 14px; border-radius: 8px; margin-bottom: 14px; font-size: 0.8rem;
@@ -201,28 +194,27 @@
       <span>갱신 <b id="metaUpdated">–</b></span>
     </span>
     <div class="header-actions">
-      <button class="account-btn" id="changeAccountBtn" type="button" hidden>광고계정 변경</button>
+      <label class="acct-sel" id="accountSelectWrap" hidden>광고계정
+        <select id="accountSelect" aria-label="광고계정 선택"></select>
+      </label>
+      <span class="auth-user" id="metaAuthUser" hidden></span>
+      <a class="account-btn" id="metaLoginBtn" href="/api/auth/meta-login" hidden>Meta 로그인</a>
+      <a class="account-btn" id="metaLogoutBtn" href="/api/auth/meta-logout" hidden>로그아웃</a>
     </div>
   </div>
 </header>
 
-<div class="overlay" id="accountOverlay" role="dialog" aria-modal="true" aria-labelledby="accountModalTitle">
-  <div class="modal">
-    <h2 id="accountModalTitle">Meta 광고계정 선택</h2>
-    <p class="hint">액세스 토큰으로 접근 가능한 <b>활성</b> 광고계정 중 하나를 선택하세요. (비활성 계정은 표시되지 않습니다)</p>
-    <div class="acct-search-wrap" id="accountSearchWrap" hidden>
-      <input type="search" id="accountSearch" placeholder="계정명 또는 계정 ID 검색" autocomplete="off" aria-label="광고계정 검색" />
-    </div>
-    <div class="acct-list-wrap">
-      <ul class="acct-list" id="accountList"></ul>
-    </div>
-    <div class="modal-actions">
-      <button type="button" id="accountCancelBtn">취소</button>
-    </div>
-  </div>
-</div>
-
 <main class="wrap">
+  <div class="gate" id="loginGate" hidden>
+    <h1>Meta Ads 계정 연결</h1>
+    <p>Meta 계정으로 로그인하면 본인에게 권한이 있는 광고계정만 안전하게 조회할 수 있습니다.<br/>(요청 권한: public_profile, ads_read)</p>
+    <a class="meta-login-btn" href="/api/auth/meta-login">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047v-2.66c0-3.026 1.792-4.697 4.533-4.697 1.313 0 2.686.236 2.686.236v2.971H15.83c-1.491 0-1.956.931-1.956 1.886v2.264h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z"/></svg>
+      Meta 계정으로 로그인
+    </a>
+  </div>
+
+  <div id="dashboardContent">
   <div class="demo-banner" id="demoBanner">
     데모 데이터로 표시 중입니다. <code>META_ACCESS_TOKEN</code> 환경변수를 설정하면 접근 가능한 광고계정 목록에서 계정을 선택해 실제 데이터를 조회할 수 있습니다.
   </div>
@@ -272,6 +264,7 @@
     </div>
     <div class="table-scroll" id="perfTable"></div>
   </section>
+  </div>
 </main>
 
 <script>
@@ -331,8 +324,7 @@ async function load(startDate, endDate) {
     const data = await r.json();
     if (!r.ok) {
       if (data.error === 'ACCOUNT_REQUIRED') {
-        $('#kpiGrid').innerHTML = '<div class="state">Meta 광고계정을 선택해 주세요.</div>';
-        openAccountPicker(true);
+        $('#kpiGrid').innerHTML = '<div class="state">상단 헤더에서 광고계정을 선택해 주세요.</div>';
         return;
       }
       throw new Error(data.detail || data.error || '조회 실패');
@@ -554,78 +546,51 @@ async function loadSummary() {
   }
 }
 
-// ---- 광고계정 선택 ----
+// ---- Meta 로그인 · 광고계정 선택 (헤더 드롭다운) ----
 function updateAccountHeader() {
   $('#metaAccountName').textContent = state.configured
     ? (state.account ? `${state.account.name} (${state.account.accountId})` : '미선택')
     : 'DEMO';
 }
 
-function renderAccountList(query = '') {
-  const q = query.trim().toLowerCase();
-  const filtered = !q
-    ? state.allAccounts
-    : state.allAccounts.filter((a) =>
-        a.name.toLowerCase().includes(q) || String(a.accountId).includes(q));
+function showLoginGate() {
+  $('#loginGate').hidden = false;
+  $('#dashboardContent').hidden = true;
+  $('#accountSelectWrap').hidden = true;
+  $('#metaLogoutBtn').hidden = true;
+}
 
-  if (!filtered.length) {
-    $('#accountList').innerHTML = `<li><div class="state">${q ? '검색 결과가 없습니다.' : '접근 가능한 광고계정이 없습니다.'}</div></li>`;
-    return;
+function showDashboard() {
+  $('#loginGate').hidden = true;
+  $('#dashboardContent').hidden = false;
+}
+
+function populateAccountSelect() {
+  const sel = $('#accountSelect');
+  sel.innerHTML = state.allAccounts.map((a) =>
+    `<option value="${escapeHtml(a.accountId)}">${escapeHtml(a.name)} (act_${escapeHtml(a.accountId)})</option>`).join('');
+
+  // 저장된 계정이 목록에 있으면 유지, 없으면 첫 번째 계정 선택
+  const validStored = state.account && state.allAccounts.some((a) => String(a.accountId) === String(state.account.accountId));
+  const chosen = validStored ? state.account : (state.allAccounts[0]
+    ? { accountId: state.allAccounts[0].accountId, name: state.allAccounts[0].name }
+    : null);
+  state.account = chosen;
+  if (chosen) {
+    sel.value = chosen.accountId;
+    try { localStorage.setItem('meta_ad_account', JSON.stringify(chosen)); } catch { /* 무시 */ }
   }
-
-  $('#accountList').innerHTML = filtered.map((a) =>
-    `<li><button type="button" data-id="${escapeHtml(a.accountId)}" data-name="${escapeHtml(a.name)}">
-      <span class="name">${escapeHtml(a.name)}</span>
-      <span class="sub">act_${escapeHtml(a.accountId)}</span>
-    </button></li>`).join('');
-
-  $('#accountList').querySelectorAll('button').forEach((btn) =>
-    btn.addEventListener('click', () => selectAccount(btn.dataset.id, btn.dataset.name)));
+  $('#accountSelectWrap').hidden = false;
+  updateAccountHeader();
 }
 
-async function openAccountPicker(required = false) {
-  $('#accountSearchWrap').hidden = true;
-  $('#accountSearch').value = '';
-  $('#accountList').innerHTML = '<li><div class="state">광고계정 목록을 불러오는 중…</div></li>';
-  $('#accountOverlay').classList.add('show');
-  $('#accountCancelBtn').hidden = required;
-
-  try {
-    if (!state.allAccounts.length) {
-      const r = await fetch('/api/meta-accounts');
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.detail || data.error || '목록 조회 실패');
-      state.allAccounts = data.accounts || [];
-    }
-    if (!state.allAccounts.length) {
-      $('#accountList').innerHTML = '<li><div class="state error">접근 가능한 광고계정이 없습니다.<br/>토큰에 ads_read 권한과 계정 할당이 되어 있는지 확인해 주세요.</div></li>';
-      return;
-    }
-    $('#accountSearchWrap').hidden = false;
-    renderAccountList('');
-    $('#accountSearch').focus();
-  } catch (e) {
-    $('#accountList').innerHTML = `<li><div class="state error">${escapeHtml(e.message)}</div></li>`;
-  }
-}
-
-function closeAccountPicker() {
-  $('#accountOverlay').classList.remove('show');
-}
-
-function selectAccount(accountId, name) {
-  state.account = { accountId, name };
+$('#accountSelect').addEventListener('change', (e) => {
+  const a = state.allAccounts.find((x) => String(x.accountId) === e.target.value);
+  if (!a) return;
+  state.account = { accountId: a.accountId, name: a.name };
   try { localStorage.setItem('meta_ad_account', JSON.stringify(state.account)); } catch { /* 무시 */ }
   updateAccountHeader();
-  closeAccountPicker();
   reload();
-}
-
-$('#changeAccountBtn').addEventListener('click', () => openAccountPicker(false));
-$('#accountSearch').addEventListener('input', (e) => renderAccountList(e.target.value));
-$('#accountCancelBtn').addEventListener('click', closeAccountPicker);
-$('#accountOverlay').addEventListener('click', (e) => {
-  if (e.target === $('#accountOverlay') && !$('#accountCancelBtn').hidden) closeAccountPicker();
 });
 
 // ---- 컨트롤 ----
@@ -650,25 +615,52 @@ $('#applyCustom').addEventListener('click', () => {
 
 // 초기 로드
 (async function bootstrap() {
+  // OAuth 콜백 결과 처리
+  const params = new URLSearchParams(location.search);
+  if (params.get('meta_auth_error')) {
+    alert('Meta 로그인에 실패했습니다: ' + params.get('meta_auth_error'));
+    history.replaceState({}, '', location.pathname);
+  } else if (params.get('meta_auth') === 'success') {
+    history.replaceState({}, '', location.pathname);
+  }
+
   const init = initialRange();
   $('#customStart').value = init.startDate;
   $('#customEnd').value = init.endDate;
 
-  // 토큰 설정 여부 확인 → 계정 선택 흐름 분기
+  // 인증 상태 + 접근 가능한 광고계정 목록 조회
+  let info = { configured: false, loginAvailable: false, loggedIn: false, accounts: [] };
   try {
     const r = await fetch('/api/meta-accounts');
     const data = await r.json();
-    state.configured = Boolean(r.ok && data.configured);
-    if (state.configured) state.allAccounts = data.accounts || [];
-  } catch { state.configured = false; }
+    if (r.ok) info = data;
+    else if (data.error) $('#kpiGrid').innerHTML = `<div class="state error">${escapeHtml(data.detail || data.error)}</div>`;
+  } catch { /* 아래에서 데모 모드 처리 */ }
 
-  $('#changeAccountBtn').hidden = !state.configured;
+  state.configured = Boolean(info.configured);
+  state.allAccounts = info.accounts || [];
+
+  // 헤더 인증 UI
+  $('#metaLoginBtn').hidden = !(info.loginAvailable && !info.loggedIn);
+  $('#metaLogoutBtn').hidden = !info.loggedIn;
+  $('#metaAuthUser').hidden = !info.loggedIn;
+  if (info.loggedIn) $('#metaAuthUser').textContent = info.metaName || '';
+
   updateAccountHeader();
 
-  if (state.configured && !state.account) {
-    $('#kpiGrid').innerHTML = '<div class="state">Meta 광고계정을 선택해 주세요.</div>';
-    openAccountPicker(true);
+  // Meta OAuth는 설정됐지만 미로그인 & 폴백 토큰도 없음 → 로그인 게이트
+  if (!state.configured && info.loginAvailable) {
+    showLoginGate();
     return;
+  }
+
+  showDashboard();
+  if (state.configured) {
+    if (!state.allAccounts.length) {
+      $('#kpiGrid').innerHTML = '<div class="state error">접근 가능한 활성 광고계정이 없습니다.<br/>로그인한 Meta 계정에 광고계정 권한이 있는지 확인해 주세요.</div>';
+      return;
+    }
+    populateAccountSelect();
   }
   load(init.startDate, init.endDate);
 })();

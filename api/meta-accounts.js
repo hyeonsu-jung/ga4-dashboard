@@ -1,13 +1,25 @@
-// api/meta-accounts.js — 토큰이 접근 가능한 Meta 광고계정 목록
+// api/meta-accounts.js — 접근 가능한 Meta 광고계정 목록
 // GET /api/meta-accounts
-// META_ACCESS_TOKEN 미설정 시 { configured: false } 반환 (프론트는 데모 모드로 동작)
+// 인증 우선순위: ① Meta 로그인 사용자 토큰(세션) ② META_ACCESS_TOKEN 환경변수(폴백)
+// 둘 다 없으면 { configured: false } 반환 (프론트는 로그인 유도 또는 데모 모드)
+
+const { getMetaUserToken, getSession, isMetaOAuthConfigured } = require('./_session');
 
 const GRAPH_VERSION = process.env.META_GRAPH_VERSION || 'v21.0';
 
 module.exports = async (req, res) => {
-  const token = process.env.META_ACCESS_TOKEN;
+  const userToken = getMetaUserToken(req);
+  const token = userToken || process.env.META_ACCESS_TOKEN;
+  const session = getSession(req);
+  const authInfo = {
+    loginAvailable: isMetaOAuthConfigured(),
+    loggedIn: Boolean(userToken),
+    metaName: userToken ? session?.metaName || null : null,
+    authMode: userToken ? 'user' : token ? 'env' : null,
+  };
+
   if (!token) {
-    return res.status(200).json({ configured: false, accounts: [] });
+    return res.status(200).json({ configured: false, accounts: [], ...authInfo });
   }
 
   try {
@@ -37,7 +49,7 @@ module.exports = async (req, res) => {
     }
 
     accounts.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
-    res.status(200).json({ configured: true, accounts });
+    res.status(200).json({ configured: true, accounts, ...authInfo });
   } catch (err) {
     console.error('[api/meta-accounts]', err);
     res.status(500).json({ error: '광고계정 목록 조회에 실패했습니다.', detail: String(err.message || err) });

@@ -7,7 +7,7 @@
 // GA4 로그인·속성 선택이 되어 있으면 sessionCampaignName 기준으로 세션/전환/매출을 매핑합니다.
 
 const { getClient, getProperty, isOAuthConfigured } = require('./_ga4');
-const { getSession } = require('./_session');
+const { getSession, getMetaUserToken } = require('./_session');
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const LEVELS = ['campaign', 'adset', 'ad'];
@@ -23,15 +23,16 @@ function normalizeCampaign(name) {
   return String(name || '').trim().toLowerCase();
 }
 
-function isMetaConfigured() {
-  return Boolean(process.env.META_ACCESS_TOKEN);
+// 인증 우선순위: ① Meta 로그인 사용자 토큰 ② META_ACCESS_TOKEN 환경변수
+function resolveMetaToken(req) {
+  return getMetaUserToken(req) || process.env.META_ACCESS_TOKEN || null;
 }
 
 // ---------- Meta Graph API ----------
 
-async function metaInsights(accountId, params) {
+async function metaInsights(token, accountId, params) {
   const url = new URL(`https://graph.facebook.com/${GRAPH_VERSION}/act_${accountId}/insights`);
-  url.searchParams.set('access_token', process.env.META_ACCESS_TOKEN);
+  url.searchParams.set('access_token', token);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
   const r = await fetch(url);
@@ -47,7 +48,7 @@ function num(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
-async function fetchMeta(accountId, startDate, endDate, prevStart, prevEnd, level) {
+async function fetchMeta(token, accountId, startDate, endDate, prevStart, prevEnd, level) {
   const timeRange = JSON.stringify({ since: startDate, until: endDate });
   const levelFields = {
     campaign: 'campaign_name',
@@ -56,20 +57,20 @@ async function fetchMeta(accountId, startDate, endDate, prevStart, prevEnd, leve
   }[level];
 
   const [rows, daily, prevTotals] = await Promise.all([
-    metaInsights(accountId, {
+    metaInsights(token, accountId, {
       level,
       fields: `${levelFields},spend,impressions,clicks`,
       time_range: timeRange,
       limit: '200',
     }),
-    metaInsights(accountId, {
+    metaInsights(token, accountId, {
       level: 'account',
       fields: 'spend,impressions,clicks',
       time_range: timeRange,
       time_increment: '1',
       limit: '400',
     }),
-    metaInsights(accountId, {
+    metaInsights(token, accountId, {
       level: 'account',
       fields: 'spend,impressions,clicks',
       time_range: JSON.stringify({ since: prevStart, until: prevEnd }),
@@ -368,7 +369,8 @@ module.exports = async (req, res) => {
     const prevEnd = shiftDate(startDate, -1);
     const prevStart = shiftDate(prevEnd, -(spanDays - 1));
 
-    if (!isMetaConfigured()) {
+    const token = resolveMetaToken(req);
+    if (!token) {
       const { meta, ga4 } = demoMeta(startDate, endDate, prevStart, prevEnd, level);
       return res.status(200).json(
         assemble({ demo: true, level, startDate, endDate, prevStart, prevEnd, meta, ga4 })
@@ -386,7 +388,7 @@ module.exports = async (req, res) => {
     }
 
     const [meta, ga4] = await Promise.all([
-      fetchMeta(accountId, startDate, endDate, prevStart, prevEnd, level),
+      fetchMeta(token, accountId, startDate, endDate, prevStart, prevEnd, level),
       fetchGa4Mapping(req, res, startDate, endDate, prevStart, prevEnd),
     ]);
 

@@ -4,6 +4,7 @@ const crypto = require('crypto');
 
 const SESSION_COOKIE = 'ga4_session';
 const STATE_COOKIE = 'oauth_state';
+const META_STATE_COOKIE = 'meta_oauth_state';
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30; // 30일
 
 function sessionSecret() {
@@ -16,6 +17,23 @@ function isOAuthConfigured() {
       process.env.GOOGLE_CLIENT_SECRET &&
       sessionSecret()
   );
+}
+
+function isMetaOAuthConfigured() {
+  return Boolean(
+    process.env.META_APP_ID &&
+      process.env.META_APP_SECRET &&
+      sessionSecret()
+  );
+}
+
+function getMetaRedirectUri(req) {
+  if (process.env.META_REDIRECT_URI) return process.env.META_REDIRECT_URI;
+  const host = req?.headers?.['x-forwarded-host'] || req?.headers?.host;
+  const proto = req?.headers?.['x-forwarded-proto'] || 'http';
+  if (host) return `${proto}://${host}/api/auth/meta-callback`;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}/api/auth/meta-callback`;
+  return 'http://localhost:3000/api/auth/meta-callback';
 }
 
 function getRedirectUri(req) {
@@ -119,6 +137,37 @@ function clearOAuthState(res) {
   appendCookie(res, buildCookie(STATE_COOKIE, '', { clear: true }));
 }
 
+function setMetaOAuthState(res, state) {
+  appendCookie(res, buildCookie(META_STATE_COOKIE, state, { maxAge: 600 }));
+}
+
+function getMetaOAuthState(req) {
+  return parseCookies(req)[META_STATE_COOKIE] || null;
+}
+
+function clearMetaOAuthState(res) {
+  appendCookie(res, buildCookie(META_STATE_COOKIE, '', { clear: true }));
+}
+
+// 기존 세션(Google 토큰 등)을 유지한 채 일부 필드만 갱신
+function updateSession(req, res, patch) {
+  const current = getSession(req) || {};
+  const next = { ...current, ...patch };
+  for (const key of Object.keys(next)) {
+    if (next[key] === undefined) delete next[key];
+  }
+  setSession(res, next);
+  return next;
+}
+
+// 유효한(만료 전) Meta 사용자 토큰
+function getMetaUserToken(req) {
+  const session = getSession(req);
+  if (!session?.metaAccessToken) return null;
+  if (session.metaTokenExpiresAt && session.metaTokenExpiresAt <= Date.now()) return null;
+  return session.metaAccessToken;
+}
+
 function publicAuthState(req) {
   const session = getSession(req);
   return {
@@ -128,6 +177,9 @@ function publicAuthState(req) {
     name: session?.name || null,
     propertyId: session?.propertyId || null,
     propertyName: session?.propertyName || null,
+    metaOauthConfigured: isMetaOAuthConfigured(),
+    metaLoggedIn: Boolean(getMetaUserToken(req)),
+    metaName: session?.metaName || null,
   };
 }
 
@@ -135,13 +187,20 @@ module.exports = {
   SESSION_COOKIE,
   SESSION_MAX_AGE,
   isOAuthConfigured,
+  isMetaOAuthConfigured,
   getRedirectUri,
+  getMetaRedirectUri,
   parseCookies,
   getSession,
   setSession,
+  updateSession,
   clearSession,
   setOAuthState,
   getOAuthState,
   clearOAuthState,
+  setMetaOAuthState,
+  getMetaOAuthState,
+  clearMetaOAuthState,
+  getMetaUserToken,
   publicAuthState,
 };
