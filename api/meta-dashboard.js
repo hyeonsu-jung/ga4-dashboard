@@ -24,13 +24,12 @@ function normalizeCampaign(name) {
 }
 
 function isMetaConfigured() {
-  return Boolean(process.env.META_ACCESS_TOKEN && process.env.META_AD_ACCOUNT_ID);
+  return Boolean(process.env.META_ACCESS_TOKEN);
 }
 
 // ---------- Meta Graph API ----------
 
-async function metaInsights(params) {
-  const accountId = String(process.env.META_AD_ACCOUNT_ID).replace(/^act_/, '');
+async function metaInsights(accountId, params) {
   const url = new URL(`https://graph.facebook.com/${GRAPH_VERSION}/act_${accountId}/insights`);
   url.searchParams.set('access_token', process.env.META_ACCESS_TOKEN);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
@@ -48,7 +47,7 @@ function num(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
-async function fetchMeta(startDate, endDate, prevStart, prevEnd, level) {
+async function fetchMeta(accountId, startDate, endDate, prevStart, prevEnd, level) {
   const timeRange = JSON.stringify({ since: startDate, until: endDate });
   const levelFields = {
     campaign: 'campaign_name',
@@ -57,20 +56,20 @@ async function fetchMeta(startDate, endDate, prevStart, prevEnd, level) {
   }[level];
 
   const [rows, daily, prevTotals] = await Promise.all([
-    metaInsights({
+    metaInsights(accountId, {
       level,
       fields: `${levelFields},spend,impressions,clicks`,
       time_range: timeRange,
       limit: '200',
     }),
-    metaInsights({
+    metaInsights(accountId, {
       level: 'account',
       fields: 'spend,impressions,clicks',
       time_range: timeRange,
       time_increment: '1',
       limit: '400',
     }),
-    metaInsights({
+    metaInsights(accountId, {
       level: 'account',
       fields: 'spend,impressions,clicks',
       time_range: JSON.stringify({ since: prevStart, until: prevEnd }),
@@ -376,8 +375,18 @@ module.exports = async (req, res) => {
       );
     }
 
+    // 광고계정 ID: 쿼리 파라미터(사이트에서 선택) 우선, 없으면 환경변수 폴백
+    const rawAccount = req.query?.accountId || process.env.META_AD_ACCOUNT_ID || '';
+    const accountId = String(rawAccount).replace(/^act_/, '');
+    if (!accountId) {
+      return res.status(400).json({ error: 'ACCOUNT_REQUIRED', message: 'Meta 광고계정을 선택해 주세요.' });
+    }
+    if (!/^\d{1,20}$/.test(accountId)) {
+      return res.status(400).json({ error: '광고계정 ID 형식이 올바르지 않습니다.' });
+    }
+
     const [meta, ga4] = await Promise.all([
-      fetchMeta(startDate, endDate, prevStart, prevEnd, level),
+      fetchMeta(accountId, startDate, endDate, prevStart, prevEnd, level),
       fetchGa4Mapping(req, res, startDate, endDate, prevStart, prevEnd),
     ]);
 
