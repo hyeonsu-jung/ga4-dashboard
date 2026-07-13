@@ -15,10 +15,8 @@ module.exports = async (req, res) => {
     let url = new URL(`https://graph.facebook.com/${GRAPH_VERSION}/me/adaccounts`);
     url.searchParams.set('access_token', token);
     url.searchParams.set('fields', 'name,account_id,account_status');
-    // 활성(account_status=1) 계정만 서버 측에서 필터링해 전송량·로딩 최소화
-    url.searchParams.set('filtering', JSON.stringify([
-      { field: 'account_status', operator: 'IN', value: [1] },
-    ]));
+    // 주의: /me/adaccounts 엣지는 account_status에 대한 filtering 파라미터를
+    // 지원하지 않으므로(#100), 전체를 받아 서버 함수에서 활성만 걸러 응답한다.
     url.searchParams.set('limit', '200');
 
     // 전체 페이지 순회 (무한 루프 방지용 안전 상한 200페이지 = 4만 개)
@@ -29,7 +27,7 @@ module.exports = async (req, res) => {
         throw new Error(data.error?.message || `Meta API HTTP ${r.status}`);
       }
       for (const a of data.data || []) {
-        if (a.account_status !== 1) continue; // 이중 안전장치
+        if (a.account_status !== 1) continue; // 활성 계정만 응답에 포함
         accounts.push({
           accountId: a.account_id,             // 숫자 ID (act_ 제외)
           name: a.name || `계정 ${a.account_id}`,
