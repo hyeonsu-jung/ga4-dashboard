@@ -1,21 +1,21 @@
 // api/meta-accounts.js — 접근 가능한 Meta 광고계정 목록
 // GET /api/meta-accounts
-// 인증 우선순위: ① Meta 로그인 사용자 토큰(세션) ② META_ACCESS_TOKEN 환경변수(폴백)
-// 둘 다 없으면 { configured: false } 반환 (프론트는 로그인 유도 또는 데모 모드)
+// 권한 분리 원칙: 오직 Meta 로그인한 사용자의 세션 토큰으로만 조회한다.
+// (공용 환경변수 토큰 폴백은 로그인 없이 계정이 노출되는 문제로 제거됨)
+// 미로그인 시 { configured: false } 반환 → 프론트는 로그인 유도 또는 데모 모드
 
 const { getMetaUserToken, getSession, isMetaOAuthConfigured } = require('./_session');
 
 const GRAPH_VERSION = process.env.META_GRAPH_VERSION || 'v21.0';
 
 module.exports = async (req, res) => {
-  const userToken = getMetaUserToken(req);
-  const token = userToken || process.env.META_ACCESS_TOKEN;
+  const token = getMetaUserToken(req);
   const session = getSession(req);
   const authInfo = {
     loginAvailable: isMetaOAuthConfigured(),
-    loggedIn: Boolean(userToken),
-    metaName: userToken ? session?.metaName || null : null,
-    authMode: userToken ? 'user' : token ? 'env' : null,
+    loggedIn: Boolean(token),
+    metaName: token ? session?.metaName || null : null,
+    authMode: token ? 'user' : null,
   };
 
   if (!token) {

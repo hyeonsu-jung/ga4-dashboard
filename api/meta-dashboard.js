@@ -7,7 +7,7 @@
 // GA4 로그인·속성 선택이 되어 있으면 sessionCampaignName 기준으로 세션/전환/매출을 매핑합니다.
 
 const { getClient, getProperty, isOAuthConfigured } = require('./_ga4');
-const { getSession, getMetaUserToken } = require('./_session');
+const { getSession, getMetaUserToken, isMetaOAuthConfigured } = require('./_session');
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const LEVELS = ['campaign', 'adset', 'ad'];
@@ -23,9 +23,10 @@ function normalizeCampaign(name) {
   return String(name || '').trim().toLowerCase();
 }
 
-// 인증 우선순위: ① Meta 로그인 사용자 토큰 ② META_ACCESS_TOKEN 환경변수
+// 권한 분리 원칙: 오직 Meta 로그인한 사용자의 세션 토큰만 사용
+// (공용 환경변수 토큰 폴백은 로그인 없이 데이터가 노출되는 문제로 제거됨)
 function resolveMetaToken(req) {
-  return getMetaUserToken(req) || process.env.META_ACCESS_TOKEN || null;
+  return getMetaUserToken(req);
 }
 
 // ---------- Meta Graph API ----------
@@ -371,6 +372,10 @@ module.exports = async (req, res) => {
 
     const token = resolveMetaToken(req);
     if (!token) {
+      // Meta OAuth가 설정된 환경에서는 로그인 필수 (데모 데이터도 노출하지 않음)
+      if (isMetaOAuthConfigured()) {
+        return res.status(401).json({ error: 'META_LOGIN_REQUIRED', message: 'Meta 계정으로 로그인해 주세요.' });
+      }
       const { meta, ga4 } = demoMeta(startDate, endDate, prevStart, prevEnd, level);
       return res.status(200).json(
         assemble({ demo: true, level, startDate, endDate, prevStart, prevEnd, meta, ga4 })
