@@ -153,14 +153,48 @@
     padding: 6px 12px; border-radius: 8px; font-size: 0.78rem; text-decoration: none;
   }
   .account-btn:hover { background: #243530; }
-  .acct-sel {
-    display: inline-flex; align-items: center; gap: 6px;
-    font-size: 0.78rem; color: #9db3ab;
+
+  .overlay {
+    display: none; position: fixed; inset: 0; background: rgba(20,32,28,.45);
+    align-items: center; justify-content: center; z-index: 100; padding: 24px;
   }
-  .acct-sel select {
-    font-family: var(--sans); font-size: 0.8rem; max-width: 260px;
-    padding: 6px 8px; border: 1px solid #3d524c; border-radius: 8px;
-    background: #243530; color: #eef4f1;
+  .overlay.show { display: flex; }
+  .modal {
+    width: min(520px, 100%); max-height: 80vh; overflow: auto;
+    background: var(--surface); border-radius: 14px; padding: 24px;
+    box-shadow: 0 16px 48px rgba(0,0,0,.18);
+  }
+  .modal h2 { font-size: 1.1rem; margin-bottom: 6px; }
+  .modal .hint { color: var(--muted); font-size: 0.85rem; margin-bottom: 14px; }
+  .acct-search-wrap { margin-bottom: 12px; }
+  .acct-search-wrap input {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
+    font-size: 0.9rem; font-family: var(--sans); background: var(--surface); color: var(--ink);
+  }
+  .acct-search-wrap input::placeholder { color: var(--muted); }
+  .acct-search-wrap input:focus { outline: 2px solid var(--meta-blue); outline-offset: 0; border-color: var(--meta-blue); }
+  .acct-list-wrap { max-height: 50vh; overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
+  .acct-list { list-style: none; }
+  .acct-list li + li { margin-top: 8px; }
+  .acct-list button {
+    width: 100%; text-align: left; border: 1px solid var(--line); background: var(--surface);
+    border-radius: 10px; padding: 12px 14px;
+  }
+  .acct-list button:hover { border-color: var(--meta-blue); background: #e7f0fe; }
+  .acct-list button[aria-current="true"] { border-color: var(--meta-blue); background: #e7f0fe; }
+  .acct-list .name { font-weight: 600; display: block; }
+  .acct-list .sub { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+  .modal-actions { margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px; }
+  .modal-actions button {
+    border: 1px solid var(--line); background: none; border-radius: 8px; padding: 8px 14px; font-size: 0.85rem;
+  }
+
+  .mapping-note {
+    margin-top: 12px; font-size: 0.8rem; color: var(--muted); line-height: 1.6;
+  }
+  .mapping-note code {
+    font-family: var(--mono); font-size: 0.75rem; background: var(--primary-soft);
+    color: var(--primary); padding: 1px 5px; border-radius: 4px;
   }
 
   .gate {
@@ -201,15 +235,29 @@
       <span>갱신 <b id="metaUpdated">–</b></span>
     </span>
     <div class="header-actions">
-      <label class="acct-sel" id="accountSelectWrap" hidden>광고계정
-        <select id="accountSelect" aria-label="광고계정 선택"></select>
-      </label>
       <span class="auth-user" id="metaAuthUser" hidden></span>
+      <button class="account-btn" id="changeAccountBtn" type="button" hidden>광고계정 변경</button>
       <a class="account-btn" id="metaLoginBtn" href="/api/auth/meta-login" hidden>Meta 로그인</a>
       <a class="account-btn" id="metaLogoutBtn" href="/api/auth/meta-logout" hidden>로그아웃</a>
     </div>
   </div>
 </header>
+
+<div class="overlay" id="accountOverlay" role="dialog" aria-modal="true" aria-labelledby="accountModalTitle">
+  <div class="modal">
+    <h2 id="accountModalTitle">Meta 광고계정 선택</h2>
+    <p class="hint">로그인한 Meta 계정에 권한이 있는 활성 광고계정 중 하나를 선택하세요.</p>
+    <div class="acct-search-wrap" id="accountSearchWrap" hidden>
+      <input type="search" id="accountSearch" placeholder="계정명 또는 계정 ID 검색" autocomplete="off" aria-label="광고계정 검색" />
+    </div>
+    <div class="acct-list-wrap">
+      <ul class="acct-list" id="accountList"></ul>
+    </div>
+    <div class="modal-actions">
+      <button type="button" id="accountCancelBtn">취소</button>
+    </div>
+  </div>
+</div>
 
 <main class="wrap">
   <div class="gate" id="loginGate" hidden>
@@ -558,7 +606,7 @@ async function loadSummary() {
   }
 }
 
-// ---- Meta 로그인 · 광고계정 선택 (헤더 드롭다운) ----
+// ---- Meta 로그인 · 광고계정 선택 (검색 모달) ----
 function updateAccountHeader() {
   $('#metaAccountName').textContent = state.configured
     ? (state.account ? `${state.account.name} (${state.account.accountId})` : '미선택')
@@ -568,7 +616,7 @@ function updateAccountHeader() {
 function showLoginGate() {
   $('#loginGate').hidden = false;
   $('#dashboardContent').hidden = true;
-  $('#accountSelectWrap').hidden = true;
+  $('#changeAccountBtn').hidden = true;
   $('#metaLogoutBtn').hidden = true;
 }
 
@@ -577,32 +625,73 @@ function showDashboard() {
   $('#dashboardContent').hidden = false;
 }
 
-function populateAccountSelect() {
-  const sel = $('#accountSelect');
-  sel.innerHTML = state.allAccounts.map((a) =>
-    `<option value="${escapeHtml(a.accountId)}">${escapeHtml(a.name)} (act_${escapeHtml(a.accountId)})</option>`).join('');
-
-  // 저장된 계정이 목록에 있으면 유지, 없으면 첫 번째 계정 선택
+// 저장된 계정이 목록에 있으면 유지, 없으면 첫 번째 계정을 기본 선택
+function ensureAccountSelected() {
   const validStored = state.account && state.allAccounts.some((a) => String(a.accountId) === String(state.account.accountId));
   const chosen = validStored ? state.account : (state.allAccounts[0]
     ? { accountId: state.allAccounts[0].accountId, name: state.allAccounts[0].name }
     : null);
   state.account = chosen;
   if (chosen) {
-    sel.value = chosen.accountId;
     try { localStorage.setItem('meta_ad_account', JSON.stringify(chosen)); } catch { /* 무시 */ }
   }
-  $('#accountSelectWrap').hidden = false;
+  $('#changeAccountBtn').hidden = false;
   updateAccountHeader();
 }
 
-$('#accountSelect').addEventListener('change', (e) => {
-  const a = state.allAccounts.find((x) => String(x.accountId) === e.target.value);
-  if (!a) return;
-  state.account = { accountId: a.accountId, name: a.name };
+function renderAccountList(query = '') {
+  const q = query.trim().toLowerCase();
+  const filtered = !q
+    ? state.allAccounts
+    : state.allAccounts.filter((a) =>
+        a.name.toLowerCase().includes(q) || String(a.accountId).includes(q));
+
+  if (!filtered.length) {
+    $('#accountList').innerHTML = `<li><div class="state">${q ? '검색 결과가 없습니다.' : '접근 가능한 광고계정이 없습니다.'}</div></li>`;
+    return;
+  }
+
+  const currentId = state.account?.accountId;
+  $('#accountList').innerHTML = filtered.map((a) =>
+    `<li><button type="button" data-id="${escapeHtml(a.accountId)}" data-name="${escapeHtml(a.name)}"${String(a.accountId) === String(currentId) ? ' aria-current="true"' : ''}>
+      <span class="name">${escapeHtml(a.name)}</span>
+      <span class="sub">act_${escapeHtml(a.accountId)}</span>
+    </button></li>`).join('');
+
+  $('#accountList').querySelectorAll('button').forEach((btn) =>
+    btn.addEventListener('click', () => selectAccount(btn.dataset.id, btn.dataset.name)));
+}
+
+function openAccountPicker() {
+  $('#accountSearch').value = '';
+  $('#accountSearchWrap').hidden = !state.allAccounts.length;
+  $('#accountOverlay').classList.add('show');
+  if (!state.allAccounts.length) {
+    $('#accountList').innerHTML = '<li><div class="state error">접근 가능한 활성 광고계정이 없습니다.<br/>로그인한 Meta 계정에 광고계정 권한이 있는지 확인해 주세요.</div></li>';
+    return;
+  }
+  renderAccountList('');
+  $('#accountSearch').focus();
+}
+
+function closeAccountPicker() {
+  $('#accountOverlay').classList.remove('show');
+}
+
+function selectAccount(accountId, name) {
+  const changed = String(state.account?.accountId) !== String(accountId);
+  state.account = { accountId, name };
   try { localStorage.setItem('meta_ad_account', JSON.stringify(state.account)); } catch { /* 무시 */ }
   updateAccountHeader();
-  reload();
+  closeAccountPicker();
+  if (changed) reload();
+}
+
+$('#changeAccountBtn').addEventListener('click', openAccountPicker);
+$('#accountSearch').addEventListener('input', (e) => renderAccountList(e.target.value));
+$('#accountCancelBtn').addEventListener('click', closeAccountPicker);
+$('#accountOverlay').addEventListener('click', (e) => {
+  if (e.target === $('#accountOverlay')) closeAccountPicker();
 });
 
 // ---- 컨트롤 ----
@@ -672,7 +761,7 @@ $('#applyCustom').addEventListener('click', () => {
       $('#kpiGrid').innerHTML = '<div class="state error">접근 가능한 활성 광고계정이 없습니다.<br/>로그인한 Meta 계정에 광고계정 권한이 있는지 확인해 주세요.</div>';
       return;
     }
-    populateAccountSelect();
+    ensureAccountSelected();
   }
   load(init.startDate, init.endDate);
 })();
