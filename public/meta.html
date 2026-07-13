@@ -173,11 +173,6 @@
   .acct-list button:hover { border-color: var(--meta-blue); background: #e7f0fe; }
   .acct-list .name { font-weight: 600; display: block; }
   .acct-list .sub { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
-  .acct-list .badge {
-    font-size: 0.68rem; padding: 1px 7px; border-radius: 999px; margin-left: 6px;
-    background: var(--primary-soft); color: var(--primary); vertical-align: middle;
-  }
-  .acct-list .badge.inactive { background: #f4e6e4; color: var(--down); }
   .modal-actions { margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px; }
   .modal-actions button {
     border: 1px solid var(--line); background: none; border-radius: 8px; padding: 8px 14px; font-size: 0.85rem;
@@ -214,7 +209,7 @@
 <div class="overlay" id="accountOverlay" role="dialog" aria-modal="true" aria-labelledby="accountModalTitle">
   <div class="modal">
     <h2 id="accountModalTitle">Meta 광고계정 선택</h2>
-    <p class="hint">액세스 토큰으로 접근 가능한 광고계정 중 하나를 선택하세요.</p>
+    <p class="hint">액세스 토큰으로 접근 가능한 <b>활성</b> 광고계정 중 하나를 선택하세요. (비활성 계정은 표시되지 않습니다)</p>
     <div class="acct-search-wrap" id="accountSearchWrap" hidden>
       <input type="search" id="accountSearch" placeholder="계정명 또는 계정 ID 검색" autocomplete="off" aria-label="광고계정 검색" />
     </div>
@@ -580,7 +575,7 @@ function renderAccountList(query = '') {
 
   $('#accountList').innerHTML = filtered.map((a) =>
     `<li><button type="button" data-id="${escapeHtml(a.accountId)}" data-name="${escapeHtml(a.name)}">
-      <span class="name">${escapeHtml(a.name)}<span class="badge${a.active ? '' : ' inactive'}">${a.active ? '활성' : '비활성'}</span></span>
+      <span class="name">${escapeHtml(a.name)}</span>
       <span class="sub">act_${escapeHtml(a.accountId)}</span>
     </button></li>`).join('');
 
