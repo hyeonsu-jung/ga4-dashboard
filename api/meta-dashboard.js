@@ -57,7 +57,7 @@ async function fetchMeta(token, accountId, startDate, endDate, prevStart, prevEn
     ad: 'campaign_name,adset_name,ad_name',
   }[level];
 
-  const [rows, daily, prevTotals] = await Promise.all([
+  const [rows, daily, prevTotals, placements] = await Promise.all([
     metaInsights(token, accountId, {
       level,
       fields: `${levelFields},spend,impressions,clicks`,
@@ -75,6 +75,17 @@ async function fetchMeta(token, accountId, startDate, endDate, prevStart, prevEn
       level: 'account',
       fields: 'spend,impressions,clicks',
       time_range: JSON.stringify({ since: prevStart, until: prevEnd }),
+    }),
+    // 지면(플랫폼)별 노출 — breakdown 미지원/오류 시에도 나머지는 유지
+    metaInsights(token, accountId, {
+      level: 'account',
+      fields: 'impressions',
+      breakdowns: 'publisher_platform,platform_position',
+      time_range: timeRange,
+      limit: '50',
+    }).catch((e) => {
+      console.warn('[api/meta-dashboard] placements unavailable:', e.message || e);
+      return [];
     }),
   ]);
 
@@ -98,7 +109,33 @@ async function fetchMeta(token, accountId, startDate, endDate, prevStart, prevEn
     prevTotals: prevTotals[0]
       ? { spend: num(prevTotals[0].spend), impressions: num(prevTotals[0].impressions), clicks: num(prevTotals[0].clicks) }
       : { spend: 0, impressions: 0, clicks: 0 },
+    placements: aggregatePlacements(placements),
   };
+}
+
+// 지면 라벨 조합 (publisher_platform + platform_position) 및 상위 6개 집계
+const PLATFORM_LABEL = {
+  facebook: 'Facebook', instagram: 'Instagram',
+  audience_network: 'Audience Network', messenger: 'Messenger',
+};
+const POSITION_LABEL = {
+  feed: 'Feed', story: 'Stories', reels: 'Reels', explore: 'Explore',
+  video_feeds: 'Video Feeds', marketplace: 'Marketplace', search: 'Search',
+  instream_video: 'In-stream', right_hand_column: 'Right Column',
+};
+
+function aggregatePlacements(rows) {
+  const map = new Map();
+  for (const r of rows || []) {
+    const plat = PLATFORM_LABEL[r.publisher_platform] || r.publisher_platform || '기타';
+    const pos = r.platform_position ? (POSITION_LABEL[r.platform_position] || r.platform_position) : '';
+    const label = pos ? `${plat} ${pos}` : plat;
+    map.set(label, (map.get(label) || 0) + num(r.impressions));
+  }
+  return [...map.entries()]
+    .map(([label, impressions]) => ({ label, impressions }))
+    .sort((a, b) => b.impressions - a.impressions)
+    .slice(0, 6);
 }
 
 // ---------- GA4 캠페인 매핑 ----------
@@ -257,10 +294,20 @@ function demoMeta(startDate, endDate, prevStart, prevEnd, level) {
     ga4Daily[date] = { sessions, keyEvents: Math.round(sessions * (0.02 + dr() * 0.015)) };
   });
 
+  // 지면별 노출 데모 (Meta 대표 플랫폼)
+  const placements = [
+    { label: 'Facebook Feed', share: 0.42 },
+    { label: 'Instagram Feed', share: 0.28 },
+    { label: 'Instagram Stories', share: 0.16 },
+    { label: 'Audience Network', share: 0.09 },
+    { label: 'Messenger', share: 0.05 },
+  ].map((p) => ({ label: p.label, impressions: Math.round(totalImp * p.share) }));
+
   return {
     meta: {
       rows,
       daily,
+      placements,
       prevTotals: {
         spend: Math.round(totalSpend * prevScale),
         impressions: Math.round(totalImp * prevScale),
@@ -350,6 +397,7 @@ function assemble({ demo, level, startDate, endDate, prevStart, prevEnd, meta, g
     },
     rows,
     daily,
+    placements: meta.placements || [],
   };
 }
 

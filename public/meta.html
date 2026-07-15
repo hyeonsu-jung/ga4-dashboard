@@ -178,6 +178,22 @@
     background: var(--primary-soft); border-color: var(--primary); color: var(--primary); font-weight: 600;
   }
   .chart-box { position: relative; height: 340px; }
+  .chart-box.donut { height: 260px; }
+
+  .accent-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 0.8rem; font-weight: 600; color: var(--down);
+    background: rgba(248, 113, 113, 0.12); border: 1px solid rgba(248, 113, 113, 0.4);
+    padding: 6px 12px; border-radius: 8px; margin-left: auto;
+  }
+  .perf-row { display: grid; grid-template-columns: 1.9fr 1fr; gap: 22px; align-items: start; }
+  @media (max-width: 900px) { .perf-row { grid-template-columns: 1fr; } }
+  .legend-list { list-style: none; margin: 16px 0 0; padding: 0; }
+  .legend-list li { display: flex; align-items: center; gap: 8px; padding: 7px 2px; font-size: 0.85rem; border-bottom: 1px solid var(--line); }
+  .legend-list li:last-child { border-bottom: none; }
+  .legend-list .dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+  .legend-list .lg-label { color: var(--ink); }
+  .legend-list .lg-pct { margin-left: auto; font-family: var(--mono); font-weight: 600; font-variant-numeric: tabular-nums; }
   .mapping-note {
     margin-top: 10px; font-size: 0.75rem; color: var(--muted);
   }
@@ -344,6 +360,7 @@
       <input type="date" id="customEnd" aria-label="종료일" />
       <button class="apply-btn" id="applyCustom">적용</button>
     </span>
+    <span class="accent-badge" id="convBadge" hidden>🎯 <b id="convBadgeVal">–</b></span>
   </div>
 
   <div class="ai-summary" id="aiSummary" role="status">
@@ -368,17 +385,30 @@
     <div class="chart-box"><canvas id="spendChart"></canvas></div>
   </section>
 
-  <section class="card">
-    <div class="card-head">
-      <div>
-        <div class="eyebrow">Campaign Performance</div>
-        <h2>메타 광고 성과 상세</h2>
+  <div class="perf-row">
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <div class="eyebrow">Campaign Performance</div>
+          <h2>메타 광고 성과 상세</h2>
+        </div>
+        <div class="metric-toggle" id="levelToggle" role="group" aria-label="분석 단위 선택"></div>
       </div>
-      <div class="metric-toggle" id="levelToggle" role="group" aria-label="분석 단위 선택"></div>
-    </div>
-    <div class="table-scroll" id="perfTable"></div>
-    <p class="mapping-note">※데이터 매핑 기준: Meta Ads API의 <code>campaign_name</code>과 GA4의 <code>sessionCampaignName</code> (<code>utm_campaign</code>) 매칭</p>
-  </section>
+      <div class="table-scroll" id="perfTable"></div>
+      <p class="mapping-note">※데이터 매핑 기준: Meta Ads API의 <code>campaign_name</code>과 GA4의 <code>sessionCampaignName</code> (<code>utm_campaign</code>) 매칭</p>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <div class="eyebrow">Placement</div>
+          <h2>지면별 노출</h2>
+        </div>
+      </div>
+      <div class="chart-box donut"><canvas id="placementChart"></canvas></div>
+      <ul class="legend-list" id="placementLegend"></ul>
+    </section>
+  </div>
   </div>
 </main>
 
@@ -398,9 +428,12 @@ if (typeof Chart !== 'undefined') {
 }
 
 const state = {
-  data: null, level: 'campaign', chart: null,
+  data: null, level: 'campaign', chart: null, placementChart: null,
   configured: false, account: null, allAccounts: [],
 };
+
+// 지면별 노출 도넛 팔레트 (Meta 플랫폼 브랜드 톤)
+const PLACEMENT_COLORS = ['#4f7bff', '#f0913e', '#f0b35e', '#a78bfa', '#34d399', '#22d3ee'];
 
 try { state.account = JSON.parse(localStorage.getItem('meta_ad_account') || 'null'); } catch { /* 무시 */ }
 
@@ -480,29 +513,85 @@ function render() {
   $('#metaCompare').textContent = `${d.compareRange.startDate} ~ ${d.compareRange.endDate}`;
   $('#metaUpdated').textContent = new Date().toLocaleString('ko-KR', { hour12: false });
 
+  renderConvBadge();
   renderKpis();
   renderChart();
   renderLevelToggle();
   renderTable();
+  renderPlacements();
   loadSummary();
+}
+
+// 우측 상단 강조 배지 (총 전환 또는 총 클릭)
+function renderConvBadge() {
+  const k = state.data.kpis;
+  const badge = $('#convBadge'), val = $('#convBadgeVal');
+  if (k.ga4KeyEvents != null) {
+    val.textContent = `총 전환 ${fmt.format(k.ga4KeyEvents)}건`;
+    badge.hidden = false;
+  } else if (k.clicks) {
+    val.textContent = `총 클릭 ${fmt.format(k.clicks)}회`;
+    badge.hidden = false;
+  } else {
+    badge.hidden = true;
+  }
+}
+
+// 지면별 노출 도넛 + 커스텀 범례
+function renderPlacements() {
+  const rows = state.data.placements || [];
+  const legend = $('#placementLegend');
+  if (typeof Chart === 'undefined' || !rows.length) {
+    if (state.placementChart) { state.placementChart.destroy(); state.placementChart = null; }
+    legend.innerHTML = '<li><div class="state">지면별 노출 데이터가 없습니다.</div></li>';
+    return;
+  }
+  const total = rows.reduce((a, r) => a + r.impressions, 0) || 1;
+  const colors = rows.map((_, i) => PLACEMENT_COLORS[i % PLACEMENT_COLORS.length]);
+
+  if (state.placementChart) state.placementChart.destroy();
+  state.placementChart = new Chart($('#placementChart'), {
+    type: 'doughnut',
+    data: {
+      labels: rows.map((r) => r.label),
+      datasets: [{
+        data: rows.map((r) => r.impressions),
+        backgroundColor: colors,
+        borderWidth: 2, borderColor: '#0d1221',
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '62%',
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (c) => `${c.label}: ${fmt.format(c.parsed)} (${(c.parsed / total * 100).toFixed(1)}%)` } },
+      },
+    },
+  });
+
+  legend.innerHTML = rows.map((r, i) => `<li>
+    <span class="dot" style="background:${colors[i]}"></span>
+    <span class="lg-label">${escapeHtml(r.label)}</span>
+    <span class="lg-pct" style="color:${colors[i]}">${(r.impressions / total * 100).toFixed(0)}%</span>
+  </li>`).join('');
 }
 
 function renderKpis() {
   const d = state.data;
   const k = d.kpis, p = d.prevKpis;
   const cards = [
-    { label: '총 광고비', icon: '💰', value: `${krw(k.spend)}<span class="unit">원</span>`, delta: deltaHtml(k.spend, p.spend) },
-    { label: '총 노출수', icon: '👁️', value: fmt.format(k.impressions), delta: deltaHtml(k.impressions, p.impressions) },
-    { label: '총 클릭수', icon: '🖱️', value: fmt.format(k.clicks), delta: deltaHtml(k.clicks, p.clicks) },
-    { label: '평균 CPC', icon: '🏷️', value: `${krw(k.cpc)}<span class="unit">원</span>`, delta: deltaHtml(k.cpc, p.cpc, true) },
-    { label: '평균 CPM', icon: '📢', value: `${krw(k.cpm)}<span class="unit">원</span>`, delta: deltaHtml(k.cpm, p.cpm, true) },
+    { label: '총 광고비', icon: '💰', tint: '#4f7bff', value: `${krw(k.spend)}<span class="unit">원</span>`, delta: deltaHtml(k.spend, p.spend) },
+    { label: '총 노출수', icon: '👁️', tint: '#22d3ee', value: fmt.format(k.impressions), delta: deltaHtml(k.impressions, p.impressions) },
+    { label: '총 클릭수', icon: '🖱️', tint: '#f0913e', value: fmt.format(k.clicks), delta: deltaHtml(k.clicks, p.clicks) },
+    { label: '평균 CPC', icon: '🏷️', tint: '#34d399', value: `${krw(k.cpc)}<span class="unit">원</span>`, delta: deltaHtml(k.cpc, p.cpc, true) },
+    { label: '평균 CPM', icon: '📢', tint: '#a78bfa', value: `${krw(k.cpm)}<span class="unit">원</span>`, delta: deltaHtml(k.cpm, p.cpm, true) },
     {
-      label: 'GA4 전환수 (매핑)', icon: '🛒',
+      label: 'GA4 전환수 (매핑)', icon: '🛒', tint: '#f0b35e',
       value: k.ga4KeyEvents == null ? '–' : fmt.format(k.ga4KeyEvents),
       delta: k.ga4KeyEvents == null ? '<span class="delta flat">GA4 미연결</span>' : deltaHtml(k.ga4KeyEvents, p.ga4KeyEvents),
     },
     {
-      label: k.roas != null ? '통합 ROAS' : '전환당 비용 (CAC)', icon: '📈',
+      label: k.roas != null ? '통합 ROAS' : '전환당 비용 (CAC)', icon: '📈', tint: '#f87171',
       value: k.roas != null
         ? `${(k.roas * 100).toFixed(0)}<span class="unit">%</span>`
         : (k.cac == null ? '–' : `${krw(k.cac)}<span class="unit">원</span>`),
@@ -512,7 +601,7 @@ function renderKpis() {
     },
   ];
   $('#kpiGrid').innerHTML = cards.map((c) => `<article class="kpi">
-    <span class="icon" aria-hidden="true">${c.icon}</span>
+    <span class="icon" aria-hidden="true" style="background:${c.tint}22;color:${c.tint}">${c.icon}</span>
     <div class="label">${c.label}</div>
     <div class="value">${c.value}</div>
     ${c.delta}
