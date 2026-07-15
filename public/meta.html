@@ -65,12 +65,17 @@
   .crumb { font-size: 0.8rem; color: var(--muted); }
   .crumb b { color: var(--ink); font-weight: 500; }
   .badge-id {
-    font-family: var(--mono); font-size: 0.68rem; color: var(--primary);
+    font-family: var(--mono); font-size: 0.82rem; color: var(--primary);
     background: var(--primary-soft); border: 1px solid rgba(79, 123, 255, 0.3);
     padding: 2px 8px; border-radius: 5px; max-width: 320px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .badge-id.dim { color: var(--muted); background: var(--surface-2); border-color: var(--line); }
+  .hdr-range {
+    font-family: var(--mono); font-size: 0.72rem; color: var(--muted);
+    white-space: nowrap;
+  }
+  .hdr-range b { color: var(--ink); font-weight: 500; }
   .seg-nav {
     display: flex; gap: 2px; margin: 0 auto;
     background: var(--surface-2); border: 1px solid var(--line);
@@ -280,6 +285,7 @@
     <span class="crumb">/ <b>Meta Ads 성과</b></span>
     <span class="badge-id" id="metaAccountName" title="현재 Meta 광고계정">–</span>
     <span class="badge-id dim" id="metaGa4Property" title="현재 GA4 속성">–</span>
+    <span class="hdr-range">조회 <b id="metaRange">–</b> · 비교 <b id="metaCompare">–</b></span>
     <nav class="seg-nav" aria-label="대시보드 전환">
       <a href="/index.html">GA4 분석</a>
       <a href="/meta.html" class="active" aria-current="page">Meta Ads</a>
@@ -374,7 +380,7 @@
 </main>
 
 <footer class="site-footer">
-  <span>조회 <b id="metaRange">–</b> · 비교 <b id="metaCompare">–</b></span>
+  <span>Meta Ads 성과 분석 대시보드</span>
   <span>마지막 업데이트: <b id="metaUpdated">–</b></span>
 </footer>
 
