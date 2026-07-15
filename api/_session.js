@@ -1,5 +1,19 @@
 // api/_session.js — 서명된 세션 쿠키 (OAuth 토큰 + 선택된 GA4 속성)
 
+// google-auth-library 등 의존성 내부에서 발생하는 url.parse() deprecation(DEP0169)
+// 경고가 서버리스 함수 로그를 오염시켜 오류처럼 보이므로 해당 경고만 억제한다.
+// (거의 모든 GA4 API 핸들러가 이 모듈을 로드하므로 여기서 1회 설정)
+if (!global.__dep0169Silenced) {
+  global.__dep0169Silenced = true;
+  const origEmitWarning = process.emitWarning.bind(process);
+  process.emitWarning = (warning, ...args) => {
+    const code = typeof args[0] === 'object' && args[0] ? args[0].code : args[1];
+    const msg = typeof warning === 'string' ? warning : warning?.message || '';
+    if (code === 'DEP0169' || msg.includes('url.parse()')) return;
+    return origEmitWarning(warning, ...args);
+  };
+}
+
 const crypto = require('crypto');
 
 const SESSION_COOKIE = 'ga4_session';

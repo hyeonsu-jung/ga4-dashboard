@@ -72,10 +72,13 @@
   }
   .badge-id.dim { color: var(--muted); background: var(--surface-2); border-color: var(--line); }
   .hdr-range {
-    font-family: var(--mono); font-size: 0.72rem; color: var(--muted);
+    font-family: var(--mono); font-size: 0.78rem; color: var(--muted);
     white-space: nowrap;
   }
   .hdr-range b { color: var(--ink); font-weight: 500; }
+  /* 헤더 텍스트 요소 높이/세로정렬 통일 */
+  .report-strip .inner { align-items: center; min-height: 44px; row-gap: 6px; }
+  .brand, .crumb, .badge-id, .hdr-range { display: inline-flex; align-items: center; height: 28px; line-height: 1; }
   .seg-nav {
     display: flex; gap: 2px; margin: 0 auto;
     background: var(--surface-2); border: 1px solid var(--line);
