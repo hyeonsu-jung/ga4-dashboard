@@ -9,16 +9,18 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
   :root {
-    --paper: #f3f6f4;
-    --surface: #ffffff;
-    --ink: #14201c;
-    --muted: #5e6b66;
-    --line: #e0e7e3;
-    --primary: #0c5c4c;
-    --primary-soft: #e2f0ea;
-    --amber: #d98e24;
-    --up: #0c7a4b;
-    --down: #c24537;
+    color-scheme: dark;
+    --paper: #080c14;
+    --surface: #0d1221;
+    --surface-2: #131929;
+    --ink: #e2e6f0;
+    --muted: #6b7894;
+    --line: rgba(255, 255, 255, 0.07);
+    --primary: #4f7bff;
+    --primary-soft: rgba(79, 123, 255, 0.14);
+    --amber: #f0b35e;
+    --up: #34d399;
+    --down: #f87171;
     --mono: 'IBM Plex Mono', ui-monospace, monospace;
     --sans: 'Pretendard Variable', Pretendard, -apple-system, sans-serif;
   }
@@ -39,10 +41,14 @@
 
   /* ---- 리포트 스트립 (문서 표제부) ---- */
   .report-strip {
-    background: var(--ink);
-    color: #eef4f1;
+    background: rgba(13, 18, 33, 0.85);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+    color: var(--ink);
     margin: 0 0 28px;
-    position: relative;
+    position: sticky;
+    top: 0;
     z-index: 101;
   }
   .report-strip .inner {
@@ -54,24 +60,25 @@
   }
   .gnb { display: flex; gap: 4px; margin-left: 12px; }
   .gnb a {
-    font-size: 0.8rem; text-decoration: none; color: #9db3ab;
+    font-size: 0.8rem; text-decoration: none; color: var(--muted);
     padding: 5px 12px; border-radius: 999px; border: 1px solid transparent;
   }
-  .gnb a:hover { color: #eef4f1; }
+  .gnb a:hover { color: var(--ink); }
   .gnb a.active {
-    color: #eef4f1; background: #243530; border-color: #3d524c; font-weight: 600;
+    color: var(--ink); background: var(--primary-soft); border-color: rgba(79, 123, 255, 0.35); font-weight: 600;
   }
   .report-strip .meta {
-    font-family: var(--mono); font-size: 0.72rem; color: #9db3ab;
+    font-family: var(--mono); font-size: 0.72rem; color: var(--muted);
     display: flex; flex-wrap: wrap; gap: 4px 24px;
   }
-  .report-strip .meta b { color: #eef4f1; font-weight: 500; }
+  .report-strip .meta b { color: var(--ink); font-weight: 500; }
   .live {
     display: inline-flex; align-items: center; gap: 8px;
     font-family: var(--mono); font-size: 0.75rem;
   }
   .live .dot {
-    width: 8px; height: 8px; border-radius: 50%; background: #35c98e;
+    width: 8px; height: 8px; border-radius: 50%; background: var(--up);
+    box-shadow: 0 0 8px rgba(52, 211, 153, 0.6);
     animation: pulse 2s infinite;
   }
   @keyframes pulse { 50% { opacity: 0.35; } }
@@ -80,7 +87,7 @@
 
   .demo-banner {
     display: none;
-    background: #fdf3e2; border: 1px solid #eed7ac; color: #7a5410;
+    background: rgba(240, 179, 94, 0.10); border: 1px solid rgba(240, 179, 94, 0.35); color: var(--amber);
     padding: 10px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 0.85rem;
   }
   .demo-banner.show { display: block; }
@@ -166,7 +173,7 @@
     gap: 14px; margin-bottom: 28px;
   }
   .kpi {
-    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
     padding: 16px 18px 12px; position: relative; overflow: hidden;
   }
   .kpi .label {
@@ -187,7 +194,7 @@
 
   /* ---- 섹션 카드 ---- */
   .card {
-    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
     padding: 20px 22px; margin-bottom: 22px;
   }
   .card-head {
@@ -216,7 +223,7 @@
   .sub-h .eyebrow { font-size: 0.62rem; }
   .signals-note {
     display: none;
-    background: #fdf3e2; border: 1px solid #eed7ac; color: #7a5410;
+    background: rgba(240, 179, 94, 0.10); border: 1px solid rgba(240, 179, 94, 0.35); color: var(--amber);
     padding: 8px 14px; border-radius: 8px; margin-bottom: 14px; font-size: 0.8rem;
   }
   .signals-note.show { display: block; }
@@ -255,12 +262,12 @@
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
     font-size: 0.78rem;
   }
-  .auth-bar .user { font-family: var(--mono); color: #9db3ab; }
+  .auth-bar .user { font-family: var(--mono); color: var(--muted); }
   .auth-btn, .property-btn {
-    border: 1px solid #3d524c; background: transparent; color: #eef4f1;
-    padding: 6px 12px; border-radius: 8px; font-size: 0.78rem;
+    border: 1px solid rgba(255, 255, 255, 0.14); background: transparent; color: var(--ink);
+    padding: 6px 12px; border-radius: 8px; font-size: 0.78rem; text-decoration: none;
   }
-  .auth-btn:hover, .property-btn:hover { background: #243530; }
+  .auth-btn:hover, .property-btn:hover { background: var(--surface-2); border-color: rgba(79, 123, 255, 0.5); }
   .google-btn {
     display: inline-flex; align-items: center; gap: 10px;
     background: #fff; color: #1f1f1f; border: none; border-radius: 10px;
@@ -278,14 +285,14 @@
   .gate p { color: var(--muted); font-size: 0.92rem; margin-bottom: 24px; }
 
   .overlay {
-    display: none; position: fixed; inset: 0; background: rgba(20,32,28,.45);
+    display: none; position: fixed; inset: 0; background: rgba(2, 4, 10, 0.65);
     align-items: center; justify-content: center; z-index: 100; padding: 24px;
   }
   .overlay.show { display: flex; }
   .modal {
     width: min(520px, 100%); max-height: 80vh; overflow: auto;
-    background: var(--surface); border-radius: 14px; padding: 24px;
-    box-shadow: 0 16px 48px rgba(0,0,0,.18);
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 24px;
+    box-shadow: 0 16px 48px rgba(0,0,0,.5);
   }
   .modal h2 { font-size: 1.1rem; margin-bottom: 6px; }
   .modal .hint { color: var(--muted); font-size: 0.85rem; margin-bottom: 14px; }
@@ -713,7 +720,13 @@ function renderLanding() {
     </tr>`).join('')}</tbody></table>`;
 }
 
-const PALETTE = ['#0c5c4c', '#d98e24', '#3d7ea6', '#c24537', '#6b5b95', '#8aa66b', '#9db3ab'];
+const PALETTE = ['#4f7bff', '#34d399', '#f0b35e', '#f87171', '#a78bfa', '#22d3ee', '#6b7894'];
+
+// Chart.js 다크 테마 기본값
+if (typeof Chart !== 'undefined') {
+  Chart.defaults.color = '#6b7894';
+  Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+}
 
 // ---- 요약 (Gemini + 룰 베이스 폴백) ----
 function detectAnomalies(daily, key, label) {
@@ -844,20 +857,20 @@ function renderChart() {
         {
           label,
           data: values,
-          borderColor: '#0c5c4c',
-          backgroundColor: 'rgba(12,92,76,0.08)',
+          borderColor: '#4f7bff',
+          backgroundColor: 'rgba(79,123,255,0.12)',
           fill: true,
           tension: 0.25,
           pointRadius: values.map((_, i) => (anomalyIdx.has(i) ? 5 : baseRadius)),
-          pointBackgroundColor: values.map((_, i) => (anomalyIdx.has(i) ? '#c24537' : '#0c5c4c')),
-          pointBorderColor: values.map((_, i) => (anomalyIdx.has(i) ? '#c24537' : '#0c5c4c')),
+          pointBackgroundColor: values.map((_, i) => (anomalyIdx.has(i) ? '#f87171' : '#4f7bff')),
+          pointBorderColor: values.map((_, i) => (anomalyIdx.has(i) ? '#f87171' : '#4f7bff')),
           borderWidth: 2,
           order: 1,
         },
         {
           label: '이전 기간',
           data: prevValues,
-          borderColor: '#9db3ab',
+          borderColor: '#6b7894',
           borderDash: [5, 4],
           fill: false,
           tension: 0.25,
@@ -885,7 +898,7 @@ function renderChart() {
         } },
       },
       scales: {
-        y: { beginAtZero: true, ticks: { callback: (v) => fmt.format(v), font: { family: 'IBM Plex Mono', size: 10 } }, grid: { color: '#eef2f0' } },
+        y: { beginAtZero: true, ticks: { callback: (v) => fmt.format(v), font: { family: 'IBM Plex Mono', size: 10 } }, grid: { color: 'rgba(255,255,255,0.06)' } },
         x: { ticks: { maxTicksLimit: 12, font: { family: 'IBM Plex Mono', size: 10 } }, grid: { display: false } },
       },
     },
@@ -964,7 +977,7 @@ function renderDemographics() {
         label: '사용자',
         data: demo.ageBrackets.map((r) => r.totalUsers),
         backgroundColor: demo.ageBrackets.map((r) =>
-          r.bracket === 'unknown' ? '#c9d4cf' : '#0c5c4c'),
+          r.bracket === 'unknown' ? 'rgba(255,255,255,0.22)' : '#4f7bff'),
         borderRadius: 4,
       }],
     },
@@ -980,7 +993,7 @@ function renderDemographics() {
         } },
       },
       scales: {
-        y: { beginAtZero: true, ticks: { callback: (v) => fmt.format(v), font: { family: 'IBM Plex Mono', size: 10 } }, grid: { color: '#eef2f0' } },
+        y: { beginAtZero: true, ticks: { callback: (v) => fmt.format(v), font: { family: 'IBM Plex Mono', size: 10 } }, grid: { color: 'rgba(255,255,255,0.06)' } },
         x: { ticks: { font: { family: 'IBM Plex Mono', size: 10 } }, grid: { display: false } },
       },
     },
@@ -995,8 +1008,8 @@ function renderDemographics() {
       datasets: [{
         data: demo.genders.map((r) => r.totalUsers),
         backgroundColor: demo.genders.map((r, i) =>
-          r.gender === 'unknown' ? '#c9d4cf' : PALETTE[i % PALETTE.length]),
-        borderWidth: 2, borderColor: '#ffffff',
+          r.gender === 'unknown' ? 'rgba(255,255,255,0.22)' : PALETTE[i % PALETTE.length]),
+        borderWidth: 2, borderColor: '#0d1221',
       }],
     },
     options: {
@@ -1007,7 +1020,7 @@ function renderDemographics() {
           generateLabels: (chart) => chart.data.labels.map((label, i) => ({
             text: `${label} ${(chart.data.datasets[0].data[i] / genderTotal * 100).toFixed(1)}%`,
             fillStyle: chart.data.datasets[0].backgroundColor[i],
-            strokeStyle: '#fff', index: i,
+            strokeStyle: '#0d1221', index: i,
           })),
         } },
         tooltip: { callbacks: { label: (c) => `${c.label}: ${fmt.format(c.parsed)}명` } },
@@ -1111,7 +1124,7 @@ function renderDevices() {
       datasets: [{
         data: rows.map((r) => r.activeUsers),
         backgroundColor: rows.map((_, i) => PALETTE[i % PALETTE.length]),
-        borderWidth: 2, borderColor: '#ffffff',
+        borderWidth: 2, borderColor: '#0d1221',
       }],
     },
     options: {
@@ -1122,7 +1135,7 @@ function renderDevices() {
           generateLabels: (chart) => chart.data.labels.map((label, i) => ({
             text: `${label} ${(chart.data.datasets[0].data[i] / total * 100).toFixed(1)}%`,
             fillStyle: chart.data.datasets[0].backgroundColor[i],
-            strokeStyle: '#fff', index: i,
+            strokeStyle: '#0d1221', index: i,
           })),
         } },
         tooltip: { callbacks: { label: (c) => `${c.label}: ${fmt.format(c.parsed)}명` } },
