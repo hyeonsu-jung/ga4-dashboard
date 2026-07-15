@@ -49,22 +49,48 @@
     z-index: 101;
   }
   .report-strip .inner {
-    max-width: 1160px; margin: 0 auto; padding: 18px 24px;
-    display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 28px;
+    max-width: 1160px; margin: 0 auto; padding: 12px 24px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
   }
-  .report-strip .doc-title { font-size: 1.05rem; font-weight: 700; letter-spacing: -0.01em; }
-  .gnb { display: flex; gap: 4px; margin-left: 12px; }
-  .gnb a {
+  .brand {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 0.95rem; font-weight: 800; letter-spacing: -0.01em;
+    color: var(--ink); text-decoration: none;
+  }
+  .brand-mark {
+    width: 26px; height: 26px; border-radius: 7px; background: var(--primary);
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .brand-mark svg { width: 15px; height: 15px; }
+  .crumb { font-size: 0.8rem; color: var(--muted); }
+  .crumb b { color: var(--ink); font-weight: 500; }
+  .badge-id {
+    font-family: var(--mono); font-size: 0.68rem; color: var(--primary);
+    background: var(--primary-soft); border: 1px solid rgba(79, 123, 255, 0.3);
+    padding: 2px 8px; border-radius: 5px; max-width: 320px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .badge-id.dim { color: var(--muted); background: var(--surface-2); border-color: var(--line); }
+  .seg-nav {
+    display: flex; gap: 2px; margin: 0 auto;
+    background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 9px; padding: 3px;
+  }
+  .seg-nav a {
+    display: inline-flex; align-items: center; gap: 6px;
     font-size: 0.8rem; text-decoration: none; color: var(--muted);
-    padding: 5px 12px; border-radius: 999px; border: 1px solid transparent;
+    padding: 5px 14px; border-radius: 7px;
   }
-  .gnb a:hover { color: var(--ink); }
-  .gnb a.active { color: var(--ink); background: var(--primary-soft); border-color: rgba(79, 123, 255, 0.35); font-weight: 600; }
-  .report-strip .meta {
+  .seg-nav a:hover { color: var(--ink); }
+  .seg-nav a.active { color: #fff; background: var(--primary); font-weight: 600; }
+
+  .site-footer {
+    max-width: 1160px; margin: 0 auto; padding: 14px 24px 28px;
+    display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px;
+    border-top: 1px solid var(--line);
     font-family: var(--mono); font-size: 0.72rem; color: var(--muted);
-    display: flex; flex-wrap: wrap; gap: 4px 24px;
   }
-  .report-strip .meta b { color: var(--ink); font-weight: 500; }
+  .site-footer b { color: var(--ink); font-weight: 500; }
 
   .demo-banner {
     display: none; background: rgba(240, 179, 94, 0.10); border: 1px solid rgba(240, 179, 94, 0.35); color: var(--amber);
@@ -74,9 +100,10 @@
 
   .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 24px; }
   .preset {
-    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
-    padding: 7px 14px; border-radius: 999px; font-size: 0.85rem;
+    border: 1px solid var(--line); background: var(--surface-2); color: var(--muted);
+    padding: 6px 12px; border-radius: 7px; font-size: 0.8rem;
   }
+  .preset:hover { color: var(--ink); }
   .preset[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
   .custom-range { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--muted); }
   .custom-range input {
@@ -105,7 +132,17 @@
   .ai-summary .src { margin-left: auto; flex-shrink: 0; font-family: var(--mono); font-size: 0.65rem; color: var(--muted); }
 
   .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; margin-bottom: 28px; }
-  .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px 12px; }
+  .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px 12px; position: relative; overflow: hidden; }
+  .kpi .icon {
+    position: absolute; top: 12px; right: 12px;
+    width: 28px; height: 28px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.85rem; background: var(--primary-soft);
+  }
+  tfoot td { border-top: 1px solid rgba(255, 255, 255, 0.14); border-bottom: none; font-weight: 600; }
+  .campaign-name { color: var(--primary); font-weight: 600; }
+  .roas-good { color: var(--up); }
+  .roas-bad { color: var(--down); }
   .kpi .label { font-size: 0.78rem; color: var(--muted); letter-spacing: 0.02em; margin-bottom: 6px; }
   .kpi .value {
     font-family: var(--mono); font-size: 1.7rem; font-weight: 600;
@@ -234,18 +271,19 @@
 
 <header class="report-strip">
   <div class="inner">
-    <span class="doc-title">웹 분석 대시보드</span>
-    <nav class="gnb" aria-label="대시보드 전환">
+    <a class="brand" href="/index.html">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 16 16" fill="none"><rect x="1.5" y="8" width="3" height="6.5" rx="1" fill="#fff"/><rect x="6.5" y="4.5" width="3" height="10" rx="1" fill="#fff" opacity=".85"/><rect x="11.5" y="1.5" width="3" height="13" rx="1" fill="#fff" opacity=".7"/></svg>
+      </span>
+      Analytics
+    </a>
+    <span class="crumb">/ <b>Meta Ads 성과</b></span>
+    <span class="badge-id" id="metaAccountName" title="현재 Meta 광고계정">–</span>
+    <span class="badge-id dim" id="metaGa4Property" title="현재 GA4 속성">–</span>
+    <nav class="seg-nav" aria-label="대시보드 전환">
       <a href="/index.html">GA4 분석</a>
       <a href="/meta.html" class="active" aria-current="page">Meta Ads</a>
     </nav>
-    <span class="meta">
-      <span>GA4 <b id="metaGa4Property">–</b></span>
-      <span>META <b id="metaAccountName">–</b></span>
-      <span>기간 <b id="metaRange">–</b></span>
-      <span>비교 <b id="metaCompare">–</b></span>
-      <span>갱신 <b id="metaUpdated">–</b></span>
-    </span>
     <div class="header-actions">
       <span class="auth-user" id="metaAuthUser" hidden></span>
       <button class="account-btn" id="changeAccountBtn" type="button" hidden>광고계정 변경</button>
@@ -335,6 +373,11 @@
   </div>
 </main>
 
+<footer class="site-footer">
+  <span>조회 <b id="metaRange">–</b> · 비교 <b id="metaCompare">–</b></span>
+  <span>마지막 업데이트: <b id="metaUpdated">–</b></span>
+</footer>
+
 <script>
 const $ = (s) => document.querySelector(s);
 const fmt = new Intl.NumberFormat('ko-KR');
@@ -385,8 +428,8 @@ function deltaHtml(now, prev, invert = false) {
   const pct = ((now - prev) / prev) * 100;
   let cls = pct > 0.05 ? 'up' : pct < -0.05 ? 'down' : 'flat';
   if (invert && cls !== 'flat') cls = cls === 'up' ? 'down' : 'up'; // 비용 지표는 감소가 긍정
-  const arrow = pct > 0.05 ? '▲' : pct < -0.05 ? '▼' : '–';
-  return `<span class="delta ${cls}">${arrow} ${Math.abs(pct).toFixed(1)}% <span style="color:var(--muted)">vs 이전 기간</span></span>`;
+  const arrow = pct > 0.05 ? '↗' : pct < -0.05 ? '↘' : '–';
+  return `<span class="delta ${cls}">${arrow} ${pct >= 0 ? '+' : '-'}${Math.abs(pct).toFixed(1)}% <span style="color:var(--muted)">전 기간 대비</span></span>`;
 }
 
 async function load(startDate, endDate) {
@@ -439,18 +482,18 @@ function renderKpis() {
   const d = state.data;
   const k = d.kpis, p = d.prevKpis;
   const cards = [
-    { label: '총 광고비', value: `${krw(k.spend)}<span class="unit">원</span>`, delta: deltaHtml(k.spend, p.spend) },
-    { label: '총 노출수', value: fmt.format(k.impressions), delta: deltaHtml(k.impressions, p.impressions) },
-    { label: '총 클릭수', value: fmt.format(k.clicks), delta: deltaHtml(k.clicks, p.clicks) },
-    { label: '평균 CPC', value: `${krw(k.cpc)}<span class="unit">원</span>`, delta: deltaHtml(k.cpc, p.cpc, true) },
-    { label: '평균 CPM', value: `${krw(k.cpm)}<span class="unit">원</span>`, delta: deltaHtml(k.cpm, p.cpm, true) },
+    { label: '총 광고비', icon: '💰', value: `${krw(k.spend)}<span class="unit">원</span>`, delta: deltaHtml(k.spend, p.spend) },
+    { label: '총 노출수', icon: '👁️', value: fmt.format(k.impressions), delta: deltaHtml(k.impressions, p.impressions) },
+    { label: '총 클릭수', icon: '🖱️', value: fmt.format(k.clicks), delta: deltaHtml(k.clicks, p.clicks) },
+    { label: '평균 CPC', icon: '🏷️', value: `${krw(k.cpc)}<span class="unit">원</span>`, delta: deltaHtml(k.cpc, p.cpc, true) },
+    { label: '평균 CPM', icon: '📢', value: `${krw(k.cpm)}<span class="unit">원</span>`, delta: deltaHtml(k.cpm, p.cpm, true) },
     {
-      label: 'GA4 전환수 (매핑)',
+      label: 'GA4 전환수 (매핑)', icon: '🛒',
       value: k.ga4KeyEvents == null ? '–' : fmt.format(k.ga4KeyEvents),
       delta: k.ga4KeyEvents == null ? '<span class="delta flat">GA4 미연결</span>' : deltaHtml(k.ga4KeyEvents, p.ga4KeyEvents),
     },
     {
-      label: k.roas != null ? '통합 ROAS' : '전환당 비용 (CAC)',
+      label: k.roas != null ? '통합 ROAS' : '전환당 비용 (CAC)', icon: '📈',
       value: k.roas != null
         ? `${(k.roas * 100).toFixed(0)}<span class="unit">%</span>`
         : (k.cac == null ? '–' : `${krw(k.cac)}<span class="unit">원</span>`),
@@ -460,6 +503,7 @@ function renderKpis() {
     },
   ];
   $('#kpiGrid').innerHTML = cards.map((c) => `<article class="kpi">
+    <span class="icon" aria-hidden="true">${c.icon}</span>
     <div class="label">${c.label}</div>
     <div class="value">${c.value}</div>
     ${c.delta}
@@ -483,11 +527,15 @@ function renderChart() {
       labels: d.daily.map((r) => r.date.slice(5)),
       datasets: [
         {
-          type: 'bar',
+          type: 'line',
           label: '광고비 (원)',
           data: d.daily.map((r) => r.spend),
-          backgroundColor: 'rgba(79,123,255,0.6)',
-          borderRadius: 3,
+          borderColor: '#4f7bff',
+          backgroundColor: 'rgba(79,123,255,0.16)',
+          fill: true,
+          tension: 0.35,
+          pointRadius: 0,
+          borderWidth: 2,
           yAxisID: 'ySpend',
           order: 2,
         },
@@ -497,8 +545,9 @@ function renderChart() {
           data: rightData,
           borderColor: '#34d399',
           backgroundColor: '#34d399',
-          tension: 0.25,
-          pointRadius: d.daily.length > 45 ? 0 : 2.5,
+          borderDash: [5, 4],
+          tension: 0.35,
+          pointRadius: d.daily.length > 45 ? 0 : 2,
           borderWidth: 2,
           yAxisID: 'yConv',
           order: 1,
@@ -574,7 +623,7 @@ function renderTable() {
       ${ga4Cols ? '<th class="num">GA4 세션</th><th class="num">GA4 전환</th><th class="num">CAC / ROAS</th>' : ''}
     </tr></thead>
     <tbody>${rows.map((r) => `<tr>
-      <td><span class="path" title="${escapeHtml(r.campaign)}">${escapeHtml(r.campaign)}</span>
+      <td><span class="path campaign-name" title="${escapeHtml(r.campaign)}">${escapeHtml(r.campaign)}</span>
         <div class="share-bar"><i style="width:${(r.spend / totalSpend * 100).toFixed(1)}%"></i></div></td>
       ${showAdset ? `<td><span class="path" title="${escapeHtml(r.adset || '')}">${escapeHtml(r.adset || '–')}</span></td>` : ''}
       ${showAd ? `<td><span class="path" title="${escapeHtml(r.ad || '')}">${escapeHtml(r.ad || '–')}</span></td>` : ''}
@@ -586,9 +635,28 @@ function renderTable() {
       ${ga4Cols ? `
         <td class="num">${dash(r.ga4Sessions, fmt.format.bind(fmt))}</td>
         <td class="num">${dash(r.ga4KeyEvents, fmt.format.bind(fmt))}</td>
-        <td class="num">${r.roas != null ? (r.roas * 100).toFixed(0) + '%' : dash(r.cac, (v) => krw(v) + '원')}</td>
+        <td class="num">${r.roas != null
+          ? `<span class="${r.roas >= 1 ? 'roas-good' : 'roas-bad'}">${(r.roas * 100).toFixed(0)}%</span>`
+          : dash(r.cac, (v) => krw(v) + '원')}</td>
       ` : ''}
-    </tr>`).join('')}</tbody></table>`;
+    </tr>`).join('')}</tbody>
+    <tfoot><tr>
+      <td>합계 / 평균</td>
+      ${showAdset ? '<td></td>' : ''}
+      ${showAd ? '<td></td>' : ''}
+      <td class="num">${krw(d.kpis.spend)}</td>
+      <td class="num">${fmt.format(d.kpis.impressions)}</td>
+      <td class="num">${fmt.format(d.kpis.clicks)}</td>
+      <td class="num">${krw(d.kpis.cpc)}</td>
+      <td class="num">${(d.kpis.ctr * 100).toFixed(2)}%</td>
+      ${ga4Cols ? `
+        <td class="num">${dash(d.kpis.ga4Sessions, fmt.format.bind(fmt))}</td>
+        <td class="num">${dash(d.kpis.ga4KeyEvents, fmt.format.bind(fmt))}</td>
+        <td class="num">${d.kpis.roas != null
+          ? `<span class="${d.kpis.roas >= 1 ? 'roas-good' : 'roas-bad'}">${(d.kpis.roas * 100).toFixed(0)}%</span>`
+          : dash(d.kpis.cac, (v) => krw(v) + '원')}</td>
+      ` : ''}
+    </tr></tfoot></table>`;
 }
 
 // ---- AI 요약 ----

@@ -55,23 +55,38 @@
     max-width: 1160px; margin: 0 auto; padding: 18px 24px;
     display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 28px;
   }
-  .report-strip .doc-title {
-    font-size: 1.05rem; font-weight: 700; letter-spacing: -0.01em;
+  .report-strip .inner { align-items: center; gap: 8px 14px; padding: 12px 24px; }
+  .brand {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 0.95rem; font-weight: 800; letter-spacing: -0.01em;
+    color: var(--ink); text-decoration: none;
   }
-  .gnb { display: flex; gap: 4px; margin-left: 12px; }
-  .gnb a {
+  .brand-mark {
+    width: 26px; height: 26px; border-radius: 7px; background: var(--primary);
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .brand-mark svg { width: 15px; height: 15px; }
+  .crumb { font-size: 0.8rem; color: var(--muted); }
+  .crumb b { color: var(--ink); font-weight: 500; }
+  .badge-id {
+    font-family: var(--mono); font-size: 0.68rem; color: var(--primary);
+    background: var(--primary-soft); border: 1px solid rgba(79, 123, 255, 0.3);
+    padding: 2px 8px; border-radius: 5px; max-width: 320px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .badge-id.dim { color: var(--muted); background: var(--surface-2); border-color: var(--line); }
+  .seg-nav {
+    display: flex; gap: 2px; margin: 0 auto;
+    background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 9px; padding: 3px;
+  }
+  .seg-nav a {
+    display: inline-flex; align-items: center; gap: 6px;
     font-size: 0.8rem; text-decoration: none; color: var(--muted);
-    padding: 5px 12px; border-radius: 999px; border: 1px solid transparent;
+    padding: 5px 14px; border-radius: 7px;
   }
-  .gnb a:hover { color: var(--ink); }
-  .gnb a.active {
-    color: var(--ink); background: var(--primary-soft); border-color: rgba(79, 123, 255, 0.35); font-weight: 600;
-  }
-  .report-strip .meta {
-    font-family: var(--mono); font-size: 0.72rem; color: var(--muted);
-    display: flex; flex-wrap: wrap; gap: 4px 24px;
-  }
-  .report-strip .meta b { color: var(--ink); font-weight: 500; }
+  .seg-nav a:hover { color: var(--ink); }
+  .seg-nav a.active { color: #fff; background: var(--primary); font-weight: 600; }
   .live {
     display: inline-flex; align-items: center; gap: 8px;
     font-family: var(--mono); font-size: 0.75rem;
@@ -97,12 +112,31 @@
     display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 24px;
   }
   .preset {
-    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
-    padding: 7px 14px; border-radius: 999px; font-size: 0.85rem;
+    border: 1px solid var(--line); background: var(--surface-2); color: var(--muted);
+    padding: 6px 12px; border-radius: 7px; font-size: 0.8rem;
   }
+  .preset:hover { color: var(--ink); }
   .preset[aria-pressed="true"] {
     background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600;
   }
+  .seg-filter {
+    display: inline-flex; gap: 2px; background: var(--surface-2);
+    border: 1px solid var(--line); border-radius: 8px; padding: 3px;
+  }
+  .seg-filter button {
+    border: none; background: none; color: var(--muted);
+    padding: 4px 12px; border-radius: 6px; font-size: 0.78rem;
+  }
+  .seg-filter button:hover { color: var(--ink); }
+  .seg-filter button[aria-pressed="true"] { background: var(--primary); color: #fff; font-weight: 600; }
+
+  .site-footer {
+    max-width: 1160px; margin: 0 auto; padding: 14px 24px 28px;
+    display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px;
+    border-top: 1px solid var(--line);
+    font-family: var(--mono); font-size: 0.72rem; color: var(--muted);
+  }
+  .site-footer b { color: var(--ink); font-weight: 500; }
   .custom-range { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--muted); }
   .custom-range input {
     font-family: var(--mono); font-size: 0.8rem; padding: 6px 8px;
@@ -175,6 +209,12 @@
   .kpi {
     background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
     padding: 16px 18px 12px; position: relative; overflow: hidden;
+  }
+  .kpi .icon {
+    position: absolute; top: 12px; right: 12px;
+    width: 28px; height: 28px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.85rem; background: var(--primary-soft);
   }
   .kpi .label {
     font-size: 0.78rem; color: var(--muted); letter-spacing: 0.02em; margin-bottom: 6px;
@@ -323,18 +363,19 @@
 
 <header class="report-strip">
   <div class="inner">
-    <span class="doc-title">웹 분석 대시보드</span>
-    <nav class="gnb" aria-label="대시보드 전환">
+    <a class="brand" href="/index.html">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 16 16" fill="none"><rect x="1.5" y="8" width="3" height="6.5" rx="1" fill="#fff"/><rect x="6.5" y="4.5" width="3" height="10" rx="1" fill="#fff" opacity=".85"/><rect x="11.5" y="1.5" width="3" height="13" rx="1" fill="#fff" opacity=".7"/></svg>
+      </span>
+      Analytics
+    </a>
+    <span class="crumb">/ <b>GA4 웹 분석</b></span>
+    <span class="badge-id" id="metaProperty" title="현재 GA4 속성">–</span>
+    <span class="badge-id dim" id="metaAdAccount" title="현재 Meta 광고계정">–</span>
+    <nav class="seg-nav" aria-label="대시보드 전환">
       <a href="/index.html" class="active" aria-current="page">GA4 분석</a>
       <a href="/meta.html">Meta Ads</a>
     </nav>
-    <span class="meta">
-      <span>GA4 <b id="metaProperty">–</b></span>
-      <span>META <b id="metaAdAccount">–</b></span>
-      <span>기간 <b id="metaRange">–</b></span>
-      <span>비교 <b id="metaCompare">–</b></span>
-      <span>갱신 <b id="metaUpdated">–</b></span>
-    </span>
     <div class="header-actions">
     <span class="live" title="최근 30분 활성 사용자">
       <span class="dot" aria-hidden="true"></span>
@@ -391,14 +432,12 @@
       <input type="date" id="customEnd" aria-label="종료일" />
       <button class="apply-btn" id="applyCustom">적용</button>
     </span>
-    <label class="filter-sel">기기
-      <select id="deviceFilter" aria-label="기기 필터">
-        <option value="">전체</option>
-        <option value="mobile">모바일</option>
-        <option value="desktop">PC</option>
-        <option value="tablet">태블릿</option>
-      </select>
-    </label>
+    <div class="seg-filter" id="deviceSeg" role="group" aria-label="기기 필터">
+      <button type="button" data-device="" aria-pressed="true">전체</button>
+      <button type="button" data-device="mobile" aria-pressed="false">Mobile</button>
+      <button type="button" data-device="desktop" aria-pressed="false">Desktop</button>
+      <button type="button" data-device="tablet" aria-pressed="false">Tablet</button>
+    </div>
     <label class="filter-sel">채널
       <select id="channelFilter" aria-label="채널 필터">
         <option value="">전체</option>
@@ -526,6 +565,11 @@
   </div>
 </main>
 
+<footer class="site-footer">
+  <span>조회 <b id="metaRange">–</b> · 비교 <b id="metaCompare">–</b></span>
+  <span>마지막 업데이트: <b id="metaUpdated">–</b></span>
+</footer>
+
 <script>
 const $ = (s) => document.querySelector(s);
 const fmt = new Intl.NumberFormat('ko-KR');
@@ -538,13 +582,13 @@ const state = {
 };
 
 const KPI_DEFS = [
-  { key: 'activeUsers', label: '활성 사용자', spark: 'activeUsers' },
-  { key: 'newUsers', label: '신규 사용자' },
-  { key: 'sessions', label: '세션', spark: 'sessions' },
-  { key: 'eventCount', label: '이벤트 수', spark: 'eventCount' },
-  { key: 'keyEvents', label: '주요 이벤트 (전환)', spark: 'keyEvents' },
-  { key: 'engagementRate', label: '참여율', format: (v) => `${(v * 100).toFixed(1)}<span class="unit">%</span>` },
-  { key: 'avgEngagementSeconds', label: '평균 참여 시간', format: (v) => {
+  { key: 'activeUsers', label: '활성 사용자', spark: 'activeUsers', icon: '👤' },
+  { key: 'newUsers', label: '신규 사용자', icon: '✨' },
+  { key: 'sessions', label: '세션', spark: 'sessions', icon: '📊' },
+  { key: 'eventCount', label: '이벤트 수', spark: 'eventCount', icon: '⚡' },
+  { key: 'keyEvents', label: '주요 이벤트 (전환)', spark: 'keyEvents', icon: '🎯' },
+  { key: 'engagementRate', label: '참여율', icon: '💬', format: (v) => `${(v * 100).toFixed(1)}<span class="unit">%</span>` },
+  { key: 'avgEngagementSeconds', label: '평균 참여 시간', icon: '⏱', format: (v) => {
       const m = Math.floor(v / 60), s = Math.round(v % 60);
       return `${m}<span class="unit">분</span> ${s}<span class="unit">초</span>`;
     } },
@@ -623,8 +667,8 @@ function deltaHtml(now, prev) {
   if (!prev) return '<span class="delta flat">이전 기간 데이터 없음</span>';
   const pct = ((now - prev) / prev) * 100;
   const cls = pct > 0.05 ? 'up' : pct < -0.05 ? 'down' : 'flat';
-  const arrow = cls === 'up' ? '▲' : cls === 'down' ? '▼' : '–';
-  return `<span class="delta ${cls}">${arrow} ${Math.abs(pct).toFixed(1)}% <span style="color:var(--muted)">vs 이전 기간</span></span>`;
+  const arrow = cls === 'up' ? '↗' : cls === 'down' ? '↘' : '–';
+  return `<span class="delta ${cls}">${arrow} ${pct >= 0 ? '+' : '-'}${Math.abs(pct).toFixed(1)}% <span style="color:var(--muted)">전 기간 대비</span></span>`;
 }
 
 function sparkline(values) {
@@ -652,6 +696,7 @@ function render() {
     const valueHtml = def.format ? def.format(now) : fmt.format(Math.round(now));
     const spark = def.spark ? sparkline(d.daily.map((r) => r[def.spark])) : '';
     return `<article class="kpi">
+      ${def.icon ? `<span class="icon" aria-hidden="true">${def.icon}</span>` : ''}
       <div class="label">${def.label}</div>
       <div class="value">${valueHtml}</div>
       ${deltaHtml(now, prev)}
@@ -685,15 +730,19 @@ function updateFilterControls() {
   if (current && !state.channelOptions.includes(current)) {
     sel.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(current)}" selected>${escapeHtml(current)}</option>`);
   }
-  $('#deviceFilter').value = state.filters.device;
-  $('#deviceFilter').classList.toggle('active', !!state.filters.device);
+  $('#deviceSeg').querySelectorAll('button').forEach((b) =>
+    b.setAttribute('aria-pressed', String(b.dataset.device === state.filters.device)));
   sel.classList.toggle('active', !!current);
 }
 
-$('#deviceFilter').addEventListener('change', (e) => {
-  state.filters.device = e.target.value;
-  reload();
-});
+$('#deviceSeg').querySelectorAll('button').forEach((b) =>
+  b.addEventListener('click', () => {
+    if (state.filters.device === b.dataset.device) return;
+    state.filters.device = b.dataset.device;
+    $('#deviceSeg').querySelectorAll('button').forEach((x) =>
+      x.setAttribute('aria-pressed', String(x === b)));
+    reload();
+  }));
 $('#channelFilter').addEventListener('change', (e) => {
   state.filters.channel = e.target.value;
   reload();
@@ -910,8 +959,8 @@ function renderTables() {
   const totalSessions = d.channels.reduce((a, c) => a + c.sessions, 0) || 1;
   $('#channelTable').innerHTML = `<table>
     <thead><tr><th>채널</th><th class="num">세션</th><th class="num">사용자</th><th class="num">주요 이벤트</th></tr></thead>
-    <tbody>${d.channels.map((c) => `<tr>
-      <td>${c.channel}<div class="share-bar"><i style="width:${(c.sessions / totalSessions * 100).toFixed(1)}%"></i></div></td>
+    <tbody>${d.channels.map((c, i) => `<tr>
+      <td>${c.channel}<div class="share-bar"><i style="width:${(c.sessions / totalSessions * 100).toFixed(1)}%;background:${PALETTE[i % PALETTE.length]}"></i></div></td>
       <td class="num">${fmt.format(c.sessions)}</td>
       <td class="num">${fmt.format(c.activeUsers)}</td>
       <td class="num">${fmt.format(c.keyEvents)}</td>
@@ -1051,8 +1100,8 @@ function renderDemographics() {
   $('#countryTable').innerHTML = countries.length
     ? `<table>
       <thead><tr><th>국가</th><th class="num">사용자</th><th class="num">세션</th></tr></thead>
-      <tbody>${countries.map((r) => `<tr>
-        <td>${escapeHtml(dimLabel(r.country))}<div class="share-bar"><i style="width:${(r.activeUsers / maxCountry * 100).toFixed(1)}%"></i></div></td>
+      <tbody>${countries.map((r, i) => `<tr>
+        <td>${escapeHtml(dimLabel(r.country))}<div class="share-bar"><i style="width:${(r.activeUsers / maxCountry * 100).toFixed(1)}%;background:${PALETTE[i % PALETTE.length]}"></i></div></td>
         <td class="num">${fmt.format(r.activeUsers)}</td>
         <td class="num">${fmt.format(r.sessions)}</td>
       </tr>`).join('')}</tbody></table>`
