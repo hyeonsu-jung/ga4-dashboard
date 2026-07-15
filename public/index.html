@@ -1079,7 +1079,7 @@ function renderDemographics() {
           generateLabels: (chart) => chart.data.labels.map((label, i) => ({
             text: `${label} ${(chart.data.datasets[0].data[i] / genderTotal * 100).toFixed(1)}%`,
             fillStyle: chart.data.datasets[0].backgroundColor[i],
-            strokeStyle: '#0d1221', index: i,
+            strokeStyle: '#0d1221', fontColor: '#ffffff', index: i,
           })),
         } },
         tooltip: { callbacks: { label: (c) => `${c.label}: ${fmt.format(c.parsed)}명` } },
@@ -1195,7 +1195,7 @@ function renderDevices() {
           generateLabels: (chart) => chart.data.labels.map((label, i) => ({
             text: `${label} ${(chart.data.datasets[0].data[i] / total * 100).toFixed(1)}%`,
             fillStyle: chart.data.datasets[0].backgroundColor[i],
-            strokeStyle: '#0d1221', index: i,
+            strokeStyle: '#0d1221', fontColor: '#ffffff', index: i,
           })),
         } },
         tooltip: { callbacks: { label: (c) => `${c.label}: ${fmt.format(c.parsed)}명` } },
