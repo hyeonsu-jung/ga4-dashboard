@@ -4,6 +4,14 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>웹 분석 대시보드 · GA4</title>
+<script>
+  // FOUC 방지: 스타일 적용 전에 저장된 테마(없으면 OS 설정)를 즉시 반영
+  (function () {
+    var t = localStorage.getItem('dash_theme') ||
+      (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/ibm-plex/6.4.0/css/ibm-plex-mono.min.css" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -21,8 +29,30 @@
     --amber: #f0b35e;
     --up: #34d399;
     --down: #f87171;
+    --header-bg: rgba(13, 18, 33, 0.85);
+    --chart-grid: rgba(255, 255, 255, 0.06);
+    --legend-text: #ffffff;
+    --overlay-bg: rgba(2, 4, 10, 0.65);
     --mono: 'IBM Plex Mono', ui-monospace, monospace;
     --sans: 'Pretendard Variable', Pretendard, -apple-system, sans-serif;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --paper: #eef1f6;
+    --surface: #ffffff;
+    --surface-2: #f2f5fa;
+    --ink: #1a2233;
+    --muted: #64708a;
+    --line: rgba(20, 30, 55, 0.11);
+    --primary: #3563e6;
+    --primary-soft: rgba(53, 99, 230, 0.10);
+    --amber: #c77d1a;
+    --up: #16a34a;
+    --down: #dc2626;
+    --header-bg: rgba(255, 255, 255, 0.85);
+    --chart-grid: rgba(20, 30, 55, 0.09);
+    --legend-text: #1a2233;
+    --overlay-bg: rgba(20, 30, 55, 0.35);
   }
   * { box-sizing: border-box; margin: 0; }
   html { font-size: 15px; }
@@ -41,7 +71,7 @@
 
   /* ---- 리포트 스트립 (문서 표제부) ---- */
   .report-strip {
-    background: rgba(13, 18, 33, 0.85);
+    background: var(--header-bg);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border-bottom: 1px solid var(--line);
@@ -95,6 +125,13 @@
   }
   .seg-nav a:hover { color: var(--ink); }
   .seg-nav a.active { color: #fff; background: var(--primary); font-weight: 600; }
+  .theme-toggle {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--surface-2); color: var(--ink);
+    font-size: 0.95rem; line-height: 1; flex-shrink: 0;
+  }
+  .theme-toggle:hover { border-color: var(--primary); }
   .live {
     display: inline-flex; align-items: center; gap: 8px;
     font-family: var(--mono); font-size: 0.75rem;
@@ -333,7 +370,7 @@
   .gate p { color: var(--muted); font-size: 0.92rem; margin-bottom: 24px; }
 
   .overlay {
-    display: none; position: fixed; inset: 0; background: rgba(2, 4, 10, 0.65);
+    display: none; position: fixed; inset: 0; background: var(--overlay-bg);
     align-items: center; justify-content: center; z-index: 100; padding: 24px;
   }
   .overlay.show { display: flex; }
@@ -386,6 +423,7 @@
       <a href="/meta.html">Meta Ads</a>
     </nav>
     <div class="header-actions">
+    <button class="theme-toggle" id="themeToggle" type="button" title="라이트/다크 모드 전환" aria-label="라이트/다크 모드 전환">🌙</button>
     <span class="live" title="최근 30분 활성 사용자">
       <span class="dot" aria-hidden="true"></span>
       실시간 <b id="liveUsers">–</b>명
@@ -780,11 +818,29 @@ function renderLanding() {
 
 const PALETTE = ['#4f7bff', '#34d399', '#f0b35e', '#f87171', '#a78bfa', '#22d3ee', '#6b7894'];
 
-// Chart.js 다크 테마 기본값
-if (typeof Chart !== 'undefined') {
-  Chart.defaults.color = '#6b7894';
-  Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+// ---- 테마 (라이트/다크) ----
+function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function currentTheme() { return document.documentElement.getAttribute('data-theme') || 'dark'; }
+function syncChartTheme() {
+  if (typeof Chart === 'undefined') return;
+  Chart.defaults.color = cssVar('--muted');
+  Chart.defaults.borderColor = cssVar('--chart-grid');
 }
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  try { localStorage.setItem('dash_theme', theme); } catch { /* 무시 */ }
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = theme === 'light' ? '☀️' : '🌙';
+  syncChartTheme();
+  if (state.data) render(); // 차트 색을 새 테마로 다시 그림
+}
+syncChartTheme();
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('themeToggle');
+  if (!btn) return;
+  btn.textContent = currentTheme() === 'light' ? '☀️' : '🌙';
+  btn.addEventListener('click', () => applyTheme(currentTheme() === 'light' ? 'dark' : 'light'));
+});
 
 // ---- 요약 (Gemini + 룰 베이스 폴백) ----
 function detectAnomalies(daily, key, label) {
@@ -928,7 +984,7 @@ function renderChart() {
         {
           label: '이전 기간',
           data: prevValues,
-          borderColor: '#6b7894',
+          borderColor: cssVar('--muted'),
           borderDash: [5, 4],
           fill: false,
           tension: 0.25,
@@ -956,7 +1012,7 @@ function renderChart() {
         } },
       },
       scales: {
-        y: { beginAtZero: true, ticks: { callback: (v) => fmt.format(v), font: { family: 'IBM Plex Mono', size: 10 } }, grid: { color: 'rgba(255,255,255,0.06)' } },
+        y: { beginAtZero: true, ticks: { callback: (v) => fmt.format(v), font: { family: 'IBM Plex Mono', size: 10 } }, grid: { color: cssVar('--chart-grid') } },
         x: { ticks: { maxTicksLimit: 12, font: { family: 'IBM Plex Mono', size: 10 } }, grid: { display: false } },
       },
     },
@@ -1051,7 +1107,7 @@ function renderDemographics() {
         } },
       },
       scales: {
-        y: { beginAtZero: true, ticks: { callback: (v) => fmt.format(v), font: { family: 'IBM Plex Mono', size: 10 } }, grid: { color: 'rgba(255,255,255,0.06)' } },
+        y: { beginAtZero: true, ticks: { callback: (v) => fmt.format(v), font: { family: 'IBM Plex Mono', size: 10 } }, grid: { color: cssVar('--chart-grid') } },
         x: { ticks: { font: { family: 'IBM Plex Mono', size: 10 } }, grid: { display: false } },
       },
     },
@@ -1067,19 +1123,19 @@ function renderDemographics() {
         data: demo.genders.map((r) => r.totalUsers),
         backgroundColor: demo.genders.map((r, i) =>
           r.gender === 'unknown' ? 'rgba(255,255,255,0.22)' : PALETTE[i % PALETTE.length]),
-        borderWidth: 2, borderColor: '#0d1221',
+        borderWidth: 2, borderColor: cssVar('--surface'),
       }],
     },
     options: {
       responsive: true, maintainAspectRatio: false, cutout: '58%',
       plugins: {
         legend: { position: 'right', labels: {
-          color: '#ffffff',
+          color: cssVar('--legend-text'),
           font: { size: 12 },
           generateLabels: (chart) => chart.data.labels.map((label, i) => ({
             text: `${label} ${(chart.data.datasets[0].data[i] / genderTotal * 100).toFixed(1)}%`,
             fillStyle: chart.data.datasets[0].backgroundColor[i],
-            strokeStyle: '#0d1221', fontColor: '#ffffff', index: i,
+            strokeStyle: cssVar('--surface'), fontColor: cssVar('--legend-text'), index: i,
           })),
         } },
         tooltip: { callbacks: { label: (c) => `${c.label}: ${fmt.format(c.parsed)}명` } },
@@ -1183,19 +1239,19 @@ function renderDevices() {
       datasets: [{
         data: rows.map((r) => r.activeUsers),
         backgroundColor: rows.map((_, i) => PALETTE[i % PALETTE.length]),
-        borderWidth: 2, borderColor: '#0d1221',
+        borderWidth: 2, borderColor: cssVar('--surface'),
       }],
     },
     options: {
       responsive: true, maintainAspectRatio: false, cutout: '58%',
       plugins: {
         legend: { position: 'right', labels: {
-          color: '#ffffff',
+          color: cssVar('--legend-text'),
           font: { size: 12 },
           generateLabels: (chart) => chart.data.labels.map((label, i) => ({
             text: `${label} ${(chart.data.datasets[0].data[i] / total * 100).toFixed(1)}%`,
             fillStyle: chart.data.datasets[0].backgroundColor[i],
-            strokeStyle: '#0d1221', fontColor: '#ffffff', index: i,
+            strokeStyle: cssVar('--surface'), fontColor: cssVar('--legend-text'), index: i,
           })),
         } },
         tooltip: { callbacks: { label: (c) => `${c.label}: ${fmt.format(c.parsed)}명` } },
