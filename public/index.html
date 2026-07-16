@@ -31,6 +31,7 @@
     --down: #f87171;
     --header-bg: rgba(13, 18, 33, 0.85);
     --chart-grid: rgba(255, 255, 255, 0.06);
+    --chart-muted-fill: rgba(255, 255, 255, 0.28);
     --legend-text: #ffffff;
     --overlay-bg: rgba(2, 4, 10, 0.65);
     --mono: 'IBM Plex Mono', ui-monospace, monospace;
@@ -51,6 +52,7 @@
     --down: #dc2626;
     --header-bg: rgba(255, 255, 255, 0.85);
     --chart-grid: rgba(20, 30, 55, 0.09);
+    --chart-muted-fill: rgba(20, 30, 55, 0.22);
     --legend-text: #1a2233;
     --overlay-bg: rgba(20, 30, 55, 0.35);
   }
@@ -1091,7 +1093,7 @@ function renderDemographics() {
         label: '사용자',
         data: demo.ageBrackets.map((r) => r.totalUsers),
         backgroundColor: demo.ageBrackets.map((r) =>
-          r.bracket === 'unknown' ? 'rgba(255,255,255,0.22)' : '#4f7bff'),
+          r.bracket === 'unknown' ? cssVar('--chart-muted-fill') : '#4f7bff'),
         borderRadius: 4,
       }],
     },
@@ -1122,7 +1124,7 @@ function renderDemographics() {
       datasets: [{
         data: demo.genders.map((r) => r.totalUsers),
         backgroundColor: demo.genders.map((r, i) =>
-          r.gender === 'unknown' ? 'rgba(255,255,255,0.22)' : PALETTE[i % PALETTE.length]),
+          r.gender === 'unknown' ? cssVar('--chart-muted-fill') : PALETTE[i % PALETTE.length]),
         borderWidth: 2, borderColor: cssVar('--surface'),
       }],
     },
