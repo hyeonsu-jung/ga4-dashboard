@@ -3,3 +3,6 @@ node_modules/
 .vercel
 *.json.key
 service-account*.json
+
+# 로컬 매칭 설정 저장소 (파일 백엔드)
+.data/
