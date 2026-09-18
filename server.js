@@ -31,7 +31,9 @@ app.get('/api/realtime', require('./api/realtime'));
 app.get('/api/properties', require('./api/properties'));
 app.post('/api/select-property', require('./api/select-property'));
 app.get('/api/meta-accounts', require('./api/meta-accounts'));
-app.get('/api/meta-dashboard', require('./api/meta-dashboard'));
+const metaDashboardHandler = require('./api/meta-dashboard');
+app.get('/api/meta-dashboard', metaDashboardHandler);
+app.post('/api/meta-dashboard', metaDashboardHandler);
 app.post('/api/summary', require('./api/summary'));
 
 const PORT = process.env.PORT || 3000;

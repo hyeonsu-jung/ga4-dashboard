@@ -1,5 +1,7 @@
 // api/meta-dashboard.js — Meta Ads 성과 + GA4 캠페인 매핑 대시보드
-// GET /api/meta-dashboard?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&level=campaign|adset|ad
+// GET  /api/meta-dashboard?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&level=campaign|adset|ad
+// POST 같은 쿼리 + { mappings: [...] } — 영구 저장소가 없는 환경에서 프론트가
+//      보관 중인 매칭 설정을 함께 전달한다 (서버에 저장된 값이 우선).
 //
 // Meta Marketing Insights API (Graph API) 사용.
 //   환경변수: META_ACCESS_TOKEN (시스템 사용자 토큰 권장), META_AD_ACCOUNT_ID (act_ 접두어 유무 무관)
@@ -11,7 +13,7 @@
 
 const { getClient, getProperty, isOAuthConfigured } = require('./_ga4');
 const { getSession, getMetaUserToken, isMetaOAuthConfigured } = require('./_session');
-const { mappingIndex, isPersistent } = require('./_match-store');
+const { mappingIndex, mergeClientMappings, isPersistent } = require('./_match-store');
 const {
   MATCH_DIMENSIONS, buildMatchFilter, aggregateMatched, describeConditions, demoGa4Rows,
 } = require('./_ga4-match');
@@ -28,6 +30,25 @@ function shiftDate(dateStr, days) {
 
 function normalizeCampaign(name) {
   return String(name || '').trim().toLowerCase();
+}
+
+function readBody(req) {
+  return new Promise((resolve) => {
+    if (req.body && typeof req.body === 'object') return resolve(req.body);
+    let data = '';
+    req.on('data', (chunk) => {
+      data += chunk;
+      if (data.length > 1e6) resolve({});
+    });
+    req.on('end', () => {
+      try {
+        resolve(data ? JSON.parse(data) : {});
+      } catch {
+        resolve({});
+      }
+    });
+    req.on('error', () => resolve({}));
+  });
 }
 
 // 권한 분리 원칙: 오직 Meta 로그인한 사용자의 세션 토큰만 사용
@@ -532,8 +553,13 @@ module.exports = async (req, res) => {
       ? String(session.propertyId)
       : 'DEMO';
     const mappings = await mappingIndex(ga4PropertyId, level);
-    const mappingList = [...mappings.values()];
     const persistent = isPersistent();
+    // KV 같은 영구 저장소가 없으면 함수 간 저장소가 공유되지 않으므로
+    // 프론트가 보낸 사본으로 보충한다.
+    if (!persistent && req.method === 'POST') {
+      mergeClientMappings(mappings, (await readBody(req)).mappings, level);
+    }
+    const mappingList = [...mappings.values()];
 
     const token = resolveMetaToken(req);
     if (!token) {

@@ -63,13 +63,18 @@ Meta 캠페인명과 GA4 캠페인명이 같지 않은 경우가 많아, **Meta 
 
 ### 저장 위치
 
-| 환경 | 저장소 |
-|---|---|
-| `KV_REST_API_URL` + `KV_REST_API_TOKEN` 설정 | Vercel KV / Upstash Redis (영구, 팀 공유) |
-| 로컬 개발 | `.data/ga4-meta-match.json` 파일 |
-| Vercel (KV 미설정) | `/tmp` (인스턴스 한정) + 브라우저 `localStorage` 사본으로 자동 복원 |
+| 환경 | 저장소 | 공유 범위 |
+|---|---|---|
+| `KV_REST_API_URL` + `KV_REST_API_TOKEN` 설정 | Vercel KV / Upstash Redis | 팀 전체 |
+| 로컬 개발 | `.data/ga4-meta-match.json` 파일 | 해당 서버 |
+| Vercel (KV 미설정) | 브라우저 `localStorage` | 설정한 브라우저 |
 
-운영 환경에서는 **KV 설정을 권장**합니다. 미설정 시 설정한 브라우저에서만 매칭이 유지됩니다.
+Vercel은 **API 라우트마다 별도 함수로 실행되어 `/tmp`·메모리를 공유하지 않습니다.**
+따라서 KV가 없으면 `/api/ga4-match/save`가 저장한 값을 `/api/meta-dashboard`가 읽을 수 없어,
+브라우저가 보관한 설정을 `POST /api/meta-dashboard` 본문에 함께 보내 집계합니다.
+
+팀 단위로 매칭을 공유하려면 **KV 설정을 권장**합니다. KV를 나중에 붙이면 브라우저에
+남아 있던 설정이 첫 조회 때 서버로 한 번 옮겨집니다.
 
 ### 관련 엔드포인트
 
@@ -78,7 +83,9 @@ GET  /api/ga4-match/dimensions?startDate=&endDate=   GA4 캠페인/소스/매체
 GET  /api/ga4-match/mappings                         저장된 매칭 설정
 POST /api/ga4-match/save     { level, objectId, objectName, conditions }
 POST /api/ga4-match/delete   { level, objectId }
-POST /api/ga4-match/restore  { mappings: [...] }
+POST /api/ga4-match/restore  { mappings: [...] }     브라우저 사본 → 서버(KV) 이관
+
+POST /api/meta-dashboard?...  { mappings: [...] }    영구 저장소가 없을 때 사본을 함께 전달
 ```
 
 ## 사전 준비 — Google OAuth

@@ -66,7 +66,7 @@
   button { font-family: var(--sans); cursor: pointer; }
   :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
-  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 24px 72px; }
+  .wrap { max-width: 1400px; margin: 0 auto; padding: 0 24px 72px; }
 
   .report-strip {
     background: var(--header-bg);
@@ -80,7 +80,7 @@
     z-index: 101;
   }
   .report-strip .inner {
-    max-width: 1160px; margin: 0 auto; padding: 12px 24px;
+    max-width: 1400px; margin: 0 auto; padding: 12px 24px;
     display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
   }
   .brand {
@@ -131,7 +131,7 @@
   .theme-toggle:hover { border-color: var(--primary); }
 
   .site-footer {
-    max-width: 1160px; margin: 0 auto; padding: 14px 24px 28px;
+    max-width: 1400px; margin: 0 auto; padding: 14px 24px 28px;
     display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px;
     border-top: 1px solid var(--line);
     font-family: var(--mono); font-size: 0.72rem; color: var(--muted);
@@ -224,11 +224,14 @@
     background: rgba(248, 113, 113, 0.12); border: 1px solid rgba(248, 113, 113, 0.4);
     padding: 6px 12px; border-radius: 8px; margin-left: auto;
   }
-  /* minmax(0, …): 컬럼이 많은 테이블이 그리드 트랙을 밀어내 페이지 전체가
-     가로 스크롤되는 것을 막고, 대신 .table-scroll 안에서만 스크롤되게 한다 */
-  .perf-row { display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr); gap: 22px; align-items: start; }
-  @media (max-width: 1100px) { .perf-row { grid-template-columns: 1fr; } }
-  .perf-row > * { min-width: 0; }
+  /* 성과 테이블은 컬럼이 많아 전체 폭을 쓰고, 지면 도넛은 아래 줄에서 범례와 나란히 둔다.
+     minmax(0, …): 테이블이 그리드 트랙을 밀어내 페이지 전체가 가로 스크롤되는 것을 막고,
+     필요할 때만 .table-scroll 안에서 스크롤되게 한다 */
+  .placement-row { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 8px 32px; align-items: center; }
+  @media (max-width: 760px) { .placement-row { grid-template-columns: 1fr; } }
+  .placement-row > * { min-width: 0; }
+  .placement-row .legend-list { margin-top: 0; }
+  .placement-row .legend-list li { padding: 9px 2px; }
   .legend-list { list-style: none; margin: 16px 0 0; padding: 0; }
   .legend-list li { display: flex; align-items: center; gap: 8px; padding: 7px 2px; font-size: 0.85rem; border-bottom: 1px solid var(--line); }
   .legend-list li:last-child { border-bottom: none; }
@@ -511,34 +514,34 @@
     <div class="chart-box"><canvas id="spendChart"></canvas></div>
   </section>
 
-  <div class="perf-row">
-    <section class="card">
-      <div class="card-head">
-        <div>
-          <div class="eyebrow">Campaign Performance</div>
-          <h2>메타 광고 성과 상세</h2>
-        </div>
-        <div class="metric-toggle" id="levelToggle" role="group" aria-label="분석 단위 선택"></div>
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <div class="eyebrow">Campaign Performance</div>
+        <h2>메타 광고 성과 상세</h2>
       </div>
-      <div class="table-scroll" id="perfTable"></div>
-      <p class="mapping-note">
-        ※GA4 매칭 기준: 각 행의 <b>[설정]</b>에서 지정한 GA4 캠페인·소스·매체·광고 콘텐츠 조건으로
-        선택된 GA4 속성의 세션·전환·매출을 집계합니다.
-        설정이 없는 캠페인은 <code>campaign_name</code> = <code>sessionCampaignName</code> 완전 일치로 자동 매칭(◐)을 시도합니다.
-      </p>
-    </section>
+      <div class="metric-toggle" id="levelToggle" role="group" aria-label="분석 단위 선택"></div>
+    </div>
+    <div class="table-scroll" id="perfTable"></div>
+    <p class="mapping-note">
+      ※GA4 매칭 기준: 각 행의 <b>[설정]</b>에서 지정한 GA4 캠페인·소스·매체·광고 콘텐츠 조건으로
+      선택된 GA4 속성의 세션·전환·매출을 집계합니다.
+      설정이 없는 캠페인은 <code>campaign_name</code> = <code>sessionCampaignName</code> 완전 일치로 자동 매칭(◐)을 시도합니다.
+    </p>
+  </section>
 
-    <section class="card">
-      <div class="card-head">
-        <div>
-          <div class="eyebrow">Placement</div>
-          <h2>지면별 노출</h2>
-        </div>
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <div class="eyebrow">Placement</div>
+        <h2>지면별 노출</h2>
       </div>
+    </div>
+    <div class="placement-row">
       <div class="chart-box donut"><canvas id="placementChart"></canvas></div>
       <ul class="legend-list" id="placementLegend"></ul>
-    </section>
-  </div>
+    </div>
+  </section>
   </div>
 </main>
 
@@ -578,6 +581,7 @@ document.addEventListener('DOMContentLoaded', () => {
 const state = {
   data: null, level: 'campaign', chart: null, placementChart: null,
   configured: false, account: null, allAccounts: [],
+  ga4PropertyId: null, // /api/auth/me 로 먼저 확인 — 매칭 사본 키에 필요
 };
 
 // 지면별 노출 도넛 팔레트 (Meta 플랫폼 브랜드 톤)
@@ -628,7 +632,13 @@ async function load(startDate, endDate) {
   try {
     const params = new URLSearchParams({ startDate, endDate, level: state.level });
     if (state.configured && state.account?.accountId) params.set('accountId', state.account.accountId);
-    const r = await fetch(`/api/meta-dashboard?${params}`);
+    // 서버에 영구 저장소가 없으면(Vercel은 API 라우트마다 저장소가 분리됨)
+    // 브라우저가 보관 중인 매칭 설정을 함께 보내야 집계가 된다.
+    const r = await fetch(`/api/meta-dashboard?${params}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mappings: readMirror() }),
+    });
     const data = await r.json();
     if (!r.ok) {
       if (data.error === 'META_LOGIN_REQUIRED') {
@@ -643,7 +653,7 @@ async function load(startDate, endDate) {
     }
     state.data = data;
     render();
-    // 서버 저장소가 휘발성인 경우 브라우저 사본으로 1회 복원 후 재조회
+    // KV를 새로 붙인 경우에만 브라우저 사본을 올리고 재조회
     if (await restoreMirrorIfNeeded()) reload();
   } catch (e) {
     $('#kpiGrid').innerHTML = `<div class="state error">Meta 광고 데이터를 불러오지 못했습니다. ${escapeHtml(e.message)}</div>`;
@@ -682,7 +692,7 @@ function renderMatchNote() {
     messages.push(`GA4 매칭 집계에 실패했습니다(${escapeHtml(s.matchError)}). 매칭된 캠페인의 세션·전환이 0으로 표시될 수 있습니다.`);
   }
   if (s.persistent === false && s.counts?.mapped) {
-    messages.push('서버에 영구 저장소(<code>KV_REST_API_URL</code>)가 설정되지 않아 매칭 설정이 이 브라우저에도 함께 보관됩니다.');
+    messages.push('서버에 영구 저장소(<code>KV_REST_API_URL</code>)가 없어 매칭 설정이 <b>이 브라우저에만</b> 보관됩니다. 다른 기기·브라우저에서는 다시 설정해야 합니다.');
   }
   note.innerHTML = messages.join('<br/>');
   note.classList.toggle('show', messages.length > 0);
@@ -961,7 +971,7 @@ const matchState = {
   restoreTried: false,
 };
 
-function currentPropertyId() { return state.data?.ga4PropertyId || 'DEMO'; }
+function currentPropertyId() { return state.data?.ga4PropertyId || state.ga4PropertyId || 'DEMO'; }
 function mirrorKey() { return `ga4_meta_match:${currentPropertyId()}`; }
 
 // 서버 저장소가 휘발성(Vercel /tmp·메모리)일 때를 대비한 브라우저 사본
@@ -980,9 +990,11 @@ function removeMirror(level, objectId) {
   writeMirror(readMirror().filter((m) => !(m.level === level && String(m.objectId) === String(objectId))));
 }
 
-// 서버에 설정이 없고 브라우저 사본만 있는 경우 1회 복원
+// 영구 저장소(KV)를 쓰는 서버에 브라우저 사본을 1회 밀어 올린다.
+// 나중에 KV를 붙였을 때 기존 설정을 옮기기 위한 것으로, 서버 값이 항상 우선한다.
+// 영구 저장소가 없는 환경에서는 조회 요청에 사본을 실어 보내므로 복원이 필요 없다.
 async function restoreMirrorIfNeeded() {
-  if (matchState.restoreTried || state.data?.matchSummary?.persistent !== false) return false;
+  if (matchState.restoreTried || state.data?.matchSummary?.persistent !== true) return false;
   matchState.restoreTried = true;
   const list = readMirror();
   if (!list.length) return false;
@@ -1242,6 +1254,7 @@ async function loadSummary() {
 
 // ---- 헤더 표시 (GA4 속성 · Meta 계정) ----
 function updateGa4Header(me) {
+  state.ga4PropertyId = me?.propertyId ? String(me.propertyId) : 'DEMO';
   const el = $('#metaGa4Property');
   if (me?.propertyId) {
     el.textContent = me.propertyName ? `${me.propertyName} (${me.propertyId})` : me.propertyId;

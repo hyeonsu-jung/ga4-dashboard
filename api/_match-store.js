@@ -8,8 +8,10 @@
 //   2) 파일                            — 로컬 개발은 .data/, Vercel은 /tmp (인스턴스 한정)
 //   3) 메모리                          — 파일 쓰기 실패 시 최후 폴백
 //
-// 영구 백엔드가 없으면 persistent: false 를 반환하며, 프론트가 localStorage
-// 사본으로 자동 복원(restore)한다.
+// 주의: Vercel에서는 API 라우트마다 별도 함수(별도 /tmp·메모리)로 실행되므로,
+// KV가 없으면 ga4-match에 저장한 설정을 meta-dashboard가 읽을 수 없다.
+// 그래서 영구 백엔드가 없으면 persistent: false 를 반환하고, 프론트가 보관 중인
+// localStorage 사본을 요청에 함께 실어 보내 mergeClientMappings()로 보충한다.
 
 const fs = require('fs');
 const path = require('path');
@@ -182,6 +184,21 @@ async function deleteMapping(propertyId, level, objectId) {
   return true;
 }
 
+// 프론트가 보낸 매칭 설정으로 서버 인덱스를 보충한다 (서버에 있는 값이 우선).
+// 영구 저장소가 없어 서버 인덱스가 비어 있는 환경에서 실제 매칭을 담당한다.
+function mergeClientMappings(index, clientMappings, level) {
+  let added = 0;
+  const list = Array.isArray(clientMappings) ? clientMappings.slice(0, MAX_MAPPINGS_PER_PROPERTY) : [];
+  for (const input of list) {
+    const mapping = normalizeMapping(input);
+    if (!mapping || mapping.level !== level) continue;
+    if (index.has(mapping.objectId)) continue;
+    index.set(mapping.objectId, { ...mapping, updatedAt: input.updatedAt || mapping.updatedAt });
+    added++;
+  }
+  return added;
+}
+
 // 서버 저장소가 비휘발성이 아닐 때 프론트 localStorage 사본으로 복원
 async function restoreMappings(propertyId, mappings) {
   const all = await readAll();
@@ -210,6 +227,7 @@ module.exports = {
   hasAnyCondition,
   listMappings,
   mappingIndex,
+  mergeClientMappings,
   saveMapping,
   deleteMapping,
   restoreMappings,
