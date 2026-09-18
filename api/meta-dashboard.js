@@ -1,13 +1,22 @@
 // api/meta-dashboard.js — Meta Ads 성과 + GA4 캠페인 매핑 대시보드
-// GET /api/meta-dashboard?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&level=campaign|adset|ad
+// GET  /api/meta-dashboard?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&level=campaign|adset|ad
+// POST 같은 쿼리 + { mappings: [...] } — 영구 저장소가 없는 환경에서 프론트가
+//      보관 중인 매칭 설정을 함께 전달한다 (서버에 저장된 값이 우선).
 //
 // Meta Marketing Insights API (Graph API) 사용.
 //   환경변수: META_ACCESS_TOKEN (시스템 사용자 토큰 권장), META_AD_ACCOUNT_ID (act_ 접두어 유무 무관)
 // 미설정 시 데모 데이터로 동작합니다.
-// GA4 로그인·속성 선택이 되어 있으면 sessionCampaignName 기준으로 세션/전환/매출을 매핑합니다.
+//
+// GA4 매칭: 선택된 GA4 속성 기준으로 Meta 객체(캠페인/광고 세트/광고 소재)별
+//   저장된 매칭 조건(캠페인·소스·매체·광고 콘텐츠)에 해당하는 세션/전환/매출을 집계한다.
+//   매칭 설정이 없는 캠페인은 캠페인명 완전 일치로 자동 매칭을 시도한다.
 
 const { getClient, getProperty, isOAuthConfigured } = require('./_ga4');
 const { getSession, getMetaUserToken, isMetaOAuthConfigured } = require('./_session');
+const { mappingIndex, mergeClientMappings, isPersistent } = require('./_match-store');
+const {
+  MATCH_DIMENSIONS, buildMatchFilter, aggregateMatched, describeConditions, demoGa4Rows,
+} = require('./_ga4-match');
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const LEVELS = ['campaign', 'adset', 'ad'];
@@ -21,6 +30,25 @@ function shiftDate(dateStr, days) {
 
 function normalizeCampaign(name) {
   return String(name || '').trim().toLowerCase();
+}
+
+function readBody(req) {
+  return new Promise((resolve) => {
+    if (req.body && typeof req.body === 'object') return resolve(req.body);
+    let data = '';
+    req.on('data', (chunk) => {
+      data += chunk;
+      if (data.length > 1e6) resolve({});
+    });
+    req.on('end', () => {
+      try {
+        resolve(data ? JSON.parse(data) : {});
+      } catch {
+        resolve({});
+      }
+    });
+    req.on('error', () => resolve({}));
+  });
 }
 
 // 권한 분리 원칙: 오직 Meta 로그인한 사용자의 세션 토큰만 사용
@@ -51,10 +79,11 @@ function num(v) {
 
 async function fetchMeta(token, accountId, startDate, endDate, prevStart, prevEnd, level) {
   const timeRange = JSON.stringify({ since: startDate, until: endDate });
+  // GA4 매칭 설정은 이름이 아니라 객체 ID를 Key로 저장하므로 ID를 함께 조회한다
   const levelFields = {
-    campaign: 'campaign_name',
-    adset: 'campaign_name,adset_name',
-    ad: 'campaign_name,adset_name,ad_name',
+    campaign: 'campaign_id,campaign_name',
+    adset: 'campaign_id,campaign_name,adset_id,adset_name',
+    ad: 'campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name',
   }[level];
 
   const [rows, daily, prevTotals, placements] = await Promise.all([
@@ -91,8 +120,11 @@ async function fetchMeta(token, accountId, startDate, endDate, prevStart, prevEn
 
   return {
     rows: rows.map((r) => ({
+      campaignId: r.campaign_id || null,
       campaign: r.campaign_name || '(이름 없음)',
+      adsetId: r.adset_id || null,
       adset: r.adset_name || null,
+      adId: r.ad_id || null,
       ad: r.ad_name || null,
       spend: num(r.spend),
       impressions: num(r.impressions),
@@ -138,68 +170,113 @@ function aggregatePlacements(rows) {
     .slice(0, 6);
 }
 
-// ---------- GA4 캠페인 매핑 ----------
+// ---------- GA4 매칭 ----------
 
-async function fetchGa4Mapping(req, res, startDate, endDate, prevStart, prevEnd) {
+// 다중 dateRanges 요청 시 GA4가 마지막에 붙여주는 dateRange 차원으로 기간을 구분한다
+function isPrevRange(row, dimensionCount) {
+  return row.dimensionValues?.[dimensionCount]?.value === 'date_range_1';
+}
+
+// 캠페인명 자동 매칭 폴백 + 일별 추이 + 이전 기간 속성 합계
+async function fetchGa4Base(client, property, { startDate, endDate, prevStart, prevEnd }) {
+  const [batch] = await client.batchRunReports({
+    property,
+    requests: [
+      // 캠페인명별 세션/전환/매출 (현재·이전 기간)
+      {
+        dateRanges: [{ startDate, endDate }, { startDate: prevStart, endDate: prevEnd }],
+        dimensions: [{ name: 'sessionCampaignName' }],
+        metrics: [{ name: 'sessions' }, { name: 'keyEvents' }, { name: 'totalRevenue' }],
+        limit: 1000,
+      },
+      // 일별 세션/전환
+      {
+        dateRanges: [{ startDate, endDate }],
+        dimensions: [{ name: 'date' }],
+        metrics: [{ name: 'sessions' }, { name: 'keyEvents' }],
+        orderBys: [{ dimension: { dimensionName: 'date' } }],
+        limit: 400,
+      },
+      // 이전 기간 속성 전체 합계
+      {
+        dateRanges: [{ startDate: prevStart, endDate: prevEnd }],
+        metrics: [{ name: 'sessions' }, { name: 'keyEvents' }],
+      },
+    ],
+  });
+
+  const [byCampaign, byDate, prevTot] = batch.reports;
+  const campaigns = {};
+  const campaignsPrev = {};
+  for (const row of byCampaign.rows || []) {
+    const target = isPrevRange(row, 1) ? campaignsPrev : campaigns;
+    target[normalizeCampaign(row.dimensionValues[0].value)] = {
+      sessions: num(row.metricValues[0].value),
+      keyEvents: num(row.metricValues[1].value),
+      revenue: num(row.metricValues[2].value),
+    };
+  }
+  const daily = {};
+  for (const row of byDate.rows || []) {
+    const d = row.dimensionValues[0].value;
+    daily[`${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`] = {
+      sessions: num(row.metricValues[0].value),
+      keyEvents: num(row.metricValues[1].value),
+    };
+  }
+  const prevRow = (prevTot.rows || [])[0];
+  return {
+    campaigns,
+    campaignsPrev,
+    daily,
+    prevTotals: prevRow
+      ? { sessions: num(prevRow.metricValues[0].value), keyEvents: num(prevRow.metricValues[1].value) }
+      : { sessions: 0, keyEvents: 0 },
+  };
+}
+
+// 저장된 매칭 조건에 해당하는 행만 조회해 Meta 객체별로 집계
+// 별도 호출로 분리해 두어, 속성이 특정 차원을 지원하지 않아도 기본 리포트는 유지된다.
+async function fetchGa4Matched(client, property, { startDate, endDate, prevStart, prevEnd, mappings }) {
+  const dimensionFilter = buildMatchFilter(mappings);
+  if (!dimensionFilter) return { current: new Map(), prev: new Map(), error: null };
+
+  try {
+    const [report] = await client.runReport({
+      property,
+      dateRanges: [{ startDate, endDate }, { startDate: prevStart, endDate: prevEnd }],
+      dimensions: MATCH_DIMENSIONS.map((name) => ({ name })),
+      metrics: [{ name: 'sessions' }, { name: 'keyEvents' }, { name: 'totalRevenue' }],
+      dimensionFilter,
+      limit: 5000,
+    });
+    const rows = report.rows || [];
+    const dimCount = MATCH_DIMENSIONS.length;
+    return {
+      current: aggregateMatched(rows.filter((r) => !isPrevRange(r, dimCount)), mappings),
+      prev: aggregateMatched(rows.filter((r) => isPrevRange(r, dimCount)), mappings),
+      error: null,
+    };
+  } catch (err) {
+    console.warn('[api/meta-dashboard] GA4 매칭 집계 실패:', err.message || err);
+    return { current: new Map(), prev: new Map(), error: String(err.message || err) };
+  }
+}
+
+async function fetchGa4(req, res, opts) {
   const session = getSession(req);
   if (!isOAuthConfigured() || !session?.accessToken || !session.propertyId) return null;
 
   try {
     const client = await getClient(req, res);
     const property = getProperty(req);
-    const [batch] = await client.batchRunReports({
-      property,
-      requests: [
-        // 캠페인별 세션/전환/매출
-        {
-          dateRanges: [{ startDate, endDate }],
-          dimensions: [{ name: 'sessionCampaignName' }],
-          metrics: [{ name: 'sessions' }, { name: 'keyEvents' }, { name: 'totalRevenue' }],
-          limit: 250,
-        },
-        // 일별 세션/전환
-        {
-          dateRanges: [{ startDate, endDate }],
-          dimensions: [{ name: 'date' }],
-          metrics: [{ name: 'sessions' }, { name: 'keyEvents' }],
-          orderBys: [{ dimension: { dimensionName: 'date' } }],
-          limit: 400,
-        },
-        // 이전 기간 합계 (전환 델타용)
-        {
-          dateRanges: [{ startDate: prevStart, endDate: prevEnd }],
-          metrics: [{ name: 'sessions' }, { name: 'keyEvents' }],
-        },
-      ],
-    });
-
-    const [byCampaign, byDate, prevTot] = batch.reports;
-    const campaigns = {};
-    for (const row of byCampaign.rows || []) {
-      campaigns[normalizeCampaign(row.dimensionValues[0].value)] = {
-        sessions: num(row.metricValues[0].value),
-        keyEvents: num(row.metricValues[1].value),
-        revenue: num(row.metricValues[2].value),
-      };
-    }
-    const daily = {};
-    for (const row of byDate.rows || []) {
-      const d = row.dimensionValues[0].value;
-      daily[`${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`] = {
-        sessions: num(row.metricValues[0].value),
-        keyEvents: num(row.metricValues[1].value),
-      };
-    }
-    const prevRow = (prevTot.rows || [])[0];
-    return {
-      campaigns,
-      daily,
-      prevTotals: prevRow
-        ? { sessions: num(prevRow.metricValues[0].value), keyEvents: num(prevRow.metricValues[1].value) }
-        : { sessions: 0, keyEvents: 0 },
-    };
+    const [base, matched] = await Promise.all([
+      fetchGa4Base(client, property, opts),
+      fetchGa4Matched(client, property, opts),
+    ]);
+    return { ...base, matched: matched.current, matchedPrev: matched.prev, matchError: matched.error };
   } catch (err) {
-    console.warn('[api/meta-dashboard] GA4 매핑 실패:', err.message || err);
+    console.warn('[api/meta-dashboard] GA4 조회 실패:', err.message || err);
     return null;
   }
 }
@@ -230,6 +307,13 @@ function eachDate(startDate, endDate) {
   return out;
 }
 
+// 데모 객체 ID — Meta 객체 ID와 같은 숫자 문자열 형태로 안정적으로 생성
+function demoId(seed) {
+  let h = 5381;
+  for (let i = 0; i < seed.length; i++) h = ((h * 33) ^ seed.charCodeAt(i)) >>> 0;
+  return `120${String(h).padStart(12, '0')}`;
+}
+
 const DEMO_CAMPAIGNS = [
   { campaign: '2026_summer_sale', adsets: ['잠재고객_확장', '리타겟_장바구니'], weight: 1.6 },
   { campaign: 'brand_search_always_on', adsets: ['브랜드_핵심'], weight: 0.7 },
@@ -237,7 +321,20 @@ const DEMO_CAMPAIGNS = [
   { campaign: 'launch_teaser', adsets: ['영상_조회', '이미지_도달'], weight: 0.9 },
 ];
 
-function demoMeta(startDate, endDate, prevStart, prevEnd, level) {
+// 데모 GA4 행(캠페인/소스/매체/콘텐츠) → 캠페인명별 합계 (자동 매칭 폴백용)
+function demoCampaignTotals(rows) {
+  const out = {};
+  for (const row of rows) {
+    const key = normalizeCampaign(row.dimensionValues[0].value);
+    const cur = out[key] || (out[key] = { sessions: 0, keyEvents: 0, revenue: 0 });
+    cur.sessions += num(row.metricValues[0].value);
+    cur.keyEvents += num(row.metricValues[1].value);
+    cur.revenue += num(row.metricValues[2].value);
+  }
+  return out;
+}
+
+function demoMeta(startDate, endDate, prevStart, prevEnd, level, mappingList) {
   const r = seededRandom(`meta:${startDate}:${endDate}:${level}`);
   const dates = eachDate(startDate, endDate);
 
@@ -248,9 +345,13 @@ function demoMeta(startDate, endDate, prevStart, prevEnd, level) {
       const spend = Math.round((80000 + r() * 400000) * c.weight / units.length);
       const impressions = Math.round((spend / (3000 + r() * 4000)) * 1000); // CPM 3~7천원
       const clicks = Math.round(impressions * (0.008 + r() * 0.017)); // CTR 0.8~2.5%
+      const adsetName = level === 'campaign' ? null : (level === 'adset' ? unit : unit.replace(/_소재[AB]$/, ''));
       rows.push({
+        campaignId: demoId(c.campaign),
         campaign: c.campaign,
-        adset: level === 'campaign' ? null : (level === 'adset' ? unit : unit.replace(/_소재[AB]$/, '')),
+        adsetId: adsetName ? demoId(`${c.campaign}|${adsetName}`) : null,
+        adset: adsetName,
+        adId: level === 'ad' ? demoId(`${c.campaign}||${unit}`) : null,
         ad: level === 'ad' ? unit : null,
         spend, impressions, clicks,
       });
@@ -272,21 +373,9 @@ function demoMeta(startDate, endDate, prevStart, prevEnd, level) {
   const totalImp = daily.reduce((a, x) => a + x.impressions, 0);
   const totalClicks = daily.reduce((a, x) => a + x.clicks, 0);
 
-  // GA4 데모 매핑 (캠페인명 일치)
-  const campaigns = {};
-  for (const row of rows) {
-    const key = normalizeCampaign(row.campaign);
-    if (!campaigns[key]) {
-      const cr = seededRandom('ga4' + row.campaign + startDate);
-      const sessions = Math.round(500 + cr() * 3000);
-      const keyEvents = Math.round(sessions * (0.015 + cr() * 0.03));
-      campaigns[key] = {
-        sessions,
-        keyEvents,
-        revenue: Math.round(keyEvents * (15000 + cr() * 35000)), // ROAS 대략 1~5배
-      };
-    }
-  }
+  // GA4 데모 행 — 매칭 설정 저장/집계까지 실제와 동일한 경로로 동작시킨다
+  const ga4Rows = demoGa4Rows(startDate, endDate);
+  const ga4RowsPrev = demoGa4Rows(prevStart, prevEnd);
   const ga4Daily = {};
   dates.forEach((date) => {
     const dr = seededRandom('ga4d' + date);
@@ -315,7 +404,11 @@ function demoMeta(startDate, endDate, prevStart, prevEnd, level) {
       },
     },
     ga4: {
-      campaigns,
+      campaigns: demoCampaignTotals(ga4Rows),
+      campaignsPrev: demoCampaignTotals(ga4RowsPrev),
+      matched: aggregateMatched(ga4Rows, mappingList),
+      matchedPrev: aggregateMatched(ga4RowsPrev, mappingList),
+      matchError: null,
       daily: ga4Daily,
       prevTotals: {
         sessions: Math.round(Object.values(ga4Daily).reduce((a, x) => a + x.sessions, 0) * prevScale),
@@ -327,41 +420,70 @@ function demoMeta(startDate, endDate, prevStart, prevEnd, level) {
 
 // ---------- 조립 ----------
 
-function assemble({ demo, level, startDate, endDate, prevStart, prevEnd, meta, ga4 }) {
+// 현재 분석 단위에 해당하는 Meta 객체 ID (매칭 설정 저장 Key)
+function objectIdFor(row, level) {
+  if (level === 'adset') return row.adsetId;
+  if (level === 'ad') return row.adId;
+  return row.campaignId;
+}
+
+function assemble({ demo, level, startDate, endDate, prevStart, prevEnd, meta, ga4, mappings, ga4PropertyId, persistent }) {
   const totals = meta.rows.reduce(
     (a, r) => ({ spend: a.spend + r.spend, impressions: a.impressions + r.impressions, clicks: a.clicks + r.clicks }),
     { spend: 0, impressions: 0, clicks: 0 }
   );
 
+  const counts = { mapped: 0, auto: 0, none: 0 };
   const rows = meta.rows
     .map((r) => {
-      const g = ga4?.campaigns?.[normalizeCampaign(r.campaign)] || null;
-      // 광고 세트/소재 레벨은 캠페인 GA4 수치를 지출 비중으로 배분하지 않고 캠페인 단위로만 표기
-      const isCampaignLevel = level === 'campaign';
+      const objectId = objectIdFor(r, level);
+      const mapping = objectId ? mappings.get(String(objectId)) : null;
+
+      // 저장된 매칭 조건 우선, 없으면 캠페인 레벨에 한해 캠페인명 완전 일치로 자동 매칭
+      let status = 'none';
+      let g = null;
+      let gPrev = null;
+      if (mapping) {
+        status = 'mapped';
+        g = ga4?.matched?.get(`${level}:${objectId}`) || { sessions: 0, keyEvents: 0, revenue: 0 };
+        gPrev = ga4?.matchedPrev?.get(`${level}:${objectId}`) || null;
+      } else if (level === 'campaign' && ga4?.campaigns) {
+        const auto = ga4.campaigns[normalizeCampaign(r.campaign)];
+        if (auto) {
+          status = 'auto';
+          g = auto;
+          gPrev = ga4.campaignsPrev?.[normalizeCampaign(r.campaign)] || null;
+        }
+      }
+      if (!ga4) { g = null; gPrev = null; } // GA4 미연결 — 설정은 유지하되 수치는 비운다
+      counts[status]++;
+
       return {
         ...r,
+        objectId: objectId || null,
         cpc: r.clicks ? r.spend / r.clicks : null,
         ctr: r.impressions ? r.clicks / r.impressions : null,
-        ga4Sessions: isCampaignLevel && g ? g.sessions : null,
-        ga4KeyEvents: isCampaignLevel && g ? g.keyEvents : null,
-        ga4Revenue: isCampaignLevel && g ? g.revenue : null,
-        cac: isCampaignLevel && g && g.keyEvents ? r.spend / g.keyEvents : null,
-        roas: isCampaignLevel && g && g.revenue && r.spend ? g.revenue / r.spend : null,
+        ga4Sessions: g ? g.sessions : null,
+        ga4KeyEvents: g ? g.keyEvents : null,
+        ga4Revenue: g ? g.revenue : null,
+        ga4PrevKeyEvents: gPrev ? gPrev.keyEvents : null,
+        cac: g && g.keyEvents ? r.spend / g.keyEvents : null,
+        roas: g && g.revenue && r.spend ? g.revenue / r.spend : null,
+        ga4Match: {
+          status,
+          conditions: mapping?.conditions || null,
+          summary: mapping ? describeConditions(mapping.conditions) : null,
+          updatedAt: mapping?.updatedAt || null,
+        },
       };
     })
     .sort((a, b) => b.spend - a.spend);
 
-  const ga4TotalKeyEvents = ga4
-    ? Object.values(ga4.campaigns).reduce((a, g) => a + g.keyEvents, 0)
-    : null;
-  const ga4TotalRevenue = ga4
-    ? Object.values(ga4.campaigns).reduce((a, g) => a + g.revenue, 0)
-    : null;
-  // 통합 지표는 "매핑된 캠페인" 기준이 아닌 전체 GA4 전환 기준이 아니라,
-  // 메타 캠페인명과 매칭된 GA4 수치 합으로 계산
+  // 통합 지표는 속성 전체가 아니라 "매칭된 행"의 합으로 계산한다
+  const matchedSessions = rows.reduce((a, r) => a + (r.ga4Sessions || 0), 0);
   const matchedKeyEvents = rows.reduce((a, r) => a + (r.ga4KeyEvents || 0), 0);
   const matchedRevenue = rows.reduce((a, r) => a + (r.ga4Revenue || 0), 0);
-  const matchedSessions = rows.reduce((a, r) => a + (r.ga4Sessions || 0), 0);
+  const matchedPrevKeyEvents = rows.reduce((a, r) => a + (r.ga4PrevKeyEvents || 0), 0);
 
   const daily = meta.daily.map((d) => ({
     ...d,
@@ -373,6 +495,13 @@ function assemble({ demo, level, startDate, endDate, prevStart, prevEnd, meta, g
     demo,
     level,
     ga4Linked: Boolean(ga4),
+    ga4PropertyId,
+    matchSummary: {
+      level,
+      counts,
+      persistent,
+      matchError: ga4?.matchError || null,
+    },
     range: { startDate, endDate },
     compareRange: { startDate: prevStart, endDate: prevEnd },
     kpis: {
@@ -393,7 +522,7 @@ function assemble({ demo, level, startDate, endDate, prevStart, prevEnd, meta, g
       clicks: meta.prevTotals.clicks,
       cpc: meta.prevTotals.clicks ? meta.prevTotals.spend / meta.prevTotals.clicks : 0,
       cpm: meta.prevTotals.impressions ? (meta.prevTotals.spend / meta.prevTotals.impressions) * 1000 : 0,
-      ga4KeyEvents: ga4 ? ga4.prevTotals.keyEvents : null,
+      ga4KeyEvents: ga4 ? matchedPrevKeyEvents : null,
     },
     rows,
     daily,
@@ -418,15 +547,29 @@ module.exports = async (req, res) => {
     const prevEnd = shiftDate(startDate, -1);
     const prevStart = shiftDate(prevEnd, -(spanDays - 1));
 
+    // 매칭 설정은 "선택된 GA4 속성 + 분석 단위" 기준으로 불러온다
+    const session = getSession(req);
+    const ga4PropertyId = isOAuthConfigured() && session?.accessToken && session?.propertyId
+      ? String(session.propertyId)
+      : 'DEMO';
+    const mappings = await mappingIndex(ga4PropertyId, level);
+    const persistent = isPersistent();
+    // KV 같은 영구 저장소가 없으면 함수 간 저장소가 공유되지 않으므로
+    // 프론트가 보낸 사본으로 보충한다.
+    if (!persistent && req.method === 'POST') {
+      mergeClientMappings(mappings, (await readBody(req)).mappings, level);
+    }
+    const mappingList = [...mappings.values()];
+
     const token = resolveMetaToken(req);
     if (!token) {
       // Meta OAuth가 설정된 환경에서는 로그인 필수 (데모 데이터도 노출하지 않음)
       if (isMetaOAuthConfigured()) {
         return res.status(401).json({ error: 'META_LOGIN_REQUIRED', message: 'Meta 계정으로 로그인해 주세요.' });
       }
-      const { meta, ga4 } = demoMeta(startDate, endDate, prevStart, prevEnd, level);
+      const { meta, ga4 } = demoMeta(startDate, endDate, prevStart, prevEnd, level, mappingList);
       return res.status(200).json(
-        assemble({ demo: true, level, startDate, endDate, prevStart, prevEnd, meta, ga4 })
+        assemble({ demo: true, level, startDate, endDate, prevStart, prevEnd, meta, ga4, mappings, ga4PropertyId, persistent })
       );
     }
 
@@ -442,11 +585,11 @@ module.exports = async (req, res) => {
 
     const [meta, ga4] = await Promise.all([
       fetchMeta(token, accountId, startDate, endDate, prevStart, prevEnd, level),
-      fetchGa4Mapping(req, res, startDate, endDate, prevStart, prevEnd),
+      fetchGa4(req, res, { startDate, endDate, prevStart, prevEnd, mappings: mappingList }),
     ]);
 
     res.status(200).json(
-      assemble({ demo: false, level, startDate, endDate, prevStart, prevEnd, meta, ga4 })
+      assemble({ demo: false, level, startDate, endDate, prevStart, prevEnd, meta, ga4, mappings, ga4PropertyId, persistent })
     );
   } catch (err) {
     console.error('[api/meta-dashboard]', err);
